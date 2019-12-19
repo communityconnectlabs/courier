@@ -34,7 +34,7 @@ func (h *handler) Initialize(s Server) error {
 	return nil
 }
 
-// receiveMessage is our HTTP handler function for incoming messages
+// registerUser is our HTTP handler function for register websocket contacts
 func (h *handler) registerUser(ctx context.Context, channel Channel, w http.ResponseWriter, r *http.Request) ([]Event, error) {
 	payload := &userPayload{}
 	err := handlers.DecodeAndValidateJSON(payload, r)
