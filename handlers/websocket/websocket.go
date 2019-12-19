@@ -78,99 +78,44 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 
 // receiveMessage is our HTTP handler function for incoming messages
 func (h *handler) receiveMessage(ctx context.Context, channel Channel, w http.ResponseWriter, r *http.Request) ([]Event, error) {
-	payload := &moPayload{}
+	payload := &msgPayload{}
 	err := handlers.DecodeAndValidateJSON(payload, r)
 	if err != nil {
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
 
 	// no message? ignore this
-	if payload.InstanceID == "" {
+	if payload.Text == "" {
 		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no message")
 	}
 
 	// the list of events we deal with
-	events := make([]courier.Event, 0, 2)
+	events := make([]Event, 0, 2)
 
 	// the list of data we will return in our response
 	data := make([]interface{}, 0, 2)
 
-	for i := range payload.Messages {
-		message := payload.Messages[i]
+	urn, errURN := urns.NewURNFromParts(channel.Schemes()[0], payload.From, "", "")
+	if errURN != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errURN)
+	}
+	text := payload.Text
 
-		if message.FromMe == false {
-			// create our date from the timestamp
-			date := time.Unix(message.Time, 0).UTC()
+	// build our msg
+	ev := h.Backend().NewIncomingMsg(channel, urn, text)
+	event := h.Backend().CheckExternalIDSeen(ev)
 
-			// create our URN
-			author := message.Author
-			contactPhoneNumber := strings.Replace(author, "@c.us", "", 1)
-			urn, errURN := urns.NewWhatsAppURN(contactPhoneNumber)
-			if errURN != nil {
-				return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errURN)
-			}
-
-			// build our name from first and last
-			name := handlers.NameFromFirstLastUsername(message.SenderName, "", "")
-
-			// our text is either "text" or "caption" (or empty)
-			text := message.Body
-			isAttachment := false
-			if message.Type == "image" {
-				text = message.Caption
-				isAttachment = true
-			}
-
-			// build our msg
-			ev := h.Backend().NewIncomingMsg(channel, urn, text).WithExternalID(message.ID).WithReceivedOn(date).WithContactName(name)
-			event := h.Backend().CheckExternalIDSeen(ev)
-
-			if isAttachment {
-				event.WithAttachment(message.Body)
-			}
-
-			errMsg := h.Backend().WriteMsg(ctx, event)
-			if errMsg != nil {
-				return nil, errMsg
-			}
-
-			h.Backend().WriteExternalIDSeen(event)
-
-			events = append(events, event)
-			data = append(data, courier.NewMsgReceiveData(event))
-		}
+	errMsg := h.Backend().WriteMsg(ctx, event)
+	if errMsg != nil {
+		return nil, errMsg
 	}
 
-	for i := range payload.Ack {
-		ack := payload.Ack[i]
-		status := courier.MsgQueued
+	h.Backend().WriteExternalIDSeen(event)
 
-		if ack.Status == "sent" {
-			status = courier.MsgSent
-		} else if ack.Status == "delivered" {
-			status = courier.MsgDelivered
-		}
+	events = append(events, event)
+	data = append(data, NewMsgReceiveData(event))
 
-		event := h.Backend().NewMsgStatusForExternalID(channel, ack.ID, status)
-		err := h.Backend().WriteMsgStatus(ctx, event)
-
-		// we don't know about this message, just tell them we ignored it
-		if err == courier.ErrMsgNotFound {
-			data = append(data, courier.NewInfoData("message not found, ignored"))
-			continue
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		events = append(events, event)
-		data = append(data, courier.NewStatusData(event))
-
-	}
-
-	return events, courier.WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", data)
-
+	return events, WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", data)
 }
 
 func (h *handler) sendMsgPart(msg Msg, apiURL string, payload *dataPayload) (string, *ChannelLog, error) {
@@ -244,19 +189,18 @@ type userPayload struct {
 }
 
 type msgPayload struct {
-	Text     string `json:"text"`
-	UserURN  string `json:"userUrn"`
-	UserUUID string `json:"userUuid"`
+	Text string `json:"text"`
+	From string `json:"from"`
 }
 
 type dataPayload struct {
-	ID          string
-	Text        string
-	To          string
-	ToNoPlus    string
-	From        string
-	FromNoPlus  string
-	Channel     string
-	Metadata    map[string][]string
-	Attachments []string
+	ID          string              `json:"id"`
+	Text        string              `json:"text"`
+	To          string              `json:"to"`
+	ToNoPlus    string              `json:"to_no_plus"`
+	From        string              `json:"from"`
+	FromNoPlus  string              `json:"from_no_plus"`
+	Channel     string              `json:"channel"`
+	Metadata    map[string][]string `json:"metadata"`
+	Attachments []string            `json:"attachments"`
 }
