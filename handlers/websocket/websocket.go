@@ -30,12 +30,13 @@ func newHandler() ChannelHandler {
 func (h *handler) Initialize(s Server) error {
 	h.SetServer(s)
 	s.AddHandlerRoute(h, http.MethodPost, "register", h.registerUser)
+	s.AddHandlerRoute(h, http.MethodPost, "receive", h.receiveMessage)
 	return nil
 }
 
 // receiveMessage is our HTTP handler function for incoming messages
 func (h *handler) registerUser(ctx context.Context, channel Channel, w http.ResponseWriter, r *http.Request) ([]Event, error) {
-	payload := &moPayload{}
+	payload := &userPayload{}
 	err := handlers.DecodeAndValidateJSON(payload, r)
 	if err != nil {
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
@@ -75,7 +76,104 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 	return nil, WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", data)
 }
 
-func (h *handler) sendMsgPart(msg Msg, apiURL string, payload interface{}) (string, *ChannelLog, error) {
+// receiveMessage is our HTTP handler function for incoming messages
+func (h *handler) receiveMessage(ctx context.Context, channel Channel, w http.ResponseWriter, r *http.Request) ([]Event, error) {
+	payload := &moPayload{}
+	err := handlers.DecodeAndValidateJSON(payload, r)
+	if err != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	}
+
+	// no message? ignore this
+	if payload.InstanceID == "" {
+		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no message")
+	}
+
+	// the list of events we deal with
+	events := make([]courier.Event, 0, 2)
+
+	// the list of data we will return in our response
+	data := make([]interface{}, 0, 2)
+
+	for i := range payload.Messages {
+		message := payload.Messages[i]
+
+		if message.FromMe == false {
+			// create our date from the timestamp
+			date := time.Unix(message.Time, 0).UTC()
+
+			// create our URN
+			author := message.Author
+			contactPhoneNumber := strings.Replace(author, "@c.us", "", 1)
+			urn, errURN := urns.NewWhatsAppURN(contactPhoneNumber)
+			if errURN != nil {
+				return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errURN)
+			}
+
+			// build our name from first and last
+			name := handlers.NameFromFirstLastUsername(message.SenderName, "", "")
+
+			// our text is either "text" or "caption" (or empty)
+			text := message.Body
+			isAttachment := false
+			if message.Type == "image" {
+				text = message.Caption
+				isAttachment = true
+			}
+
+			// build our msg
+			ev := h.Backend().NewIncomingMsg(channel, urn, text).WithExternalID(message.ID).WithReceivedOn(date).WithContactName(name)
+			event := h.Backend().CheckExternalIDSeen(ev)
+
+			if isAttachment {
+				event.WithAttachment(message.Body)
+			}
+
+			errMsg := h.Backend().WriteMsg(ctx, event)
+			if errMsg != nil {
+				return nil, errMsg
+			}
+
+			h.Backend().WriteExternalIDSeen(event)
+
+			events = append(events, event)
+			data = append(data, courier.NewMsgReceiveData(event))
+		}
+	}
+
+	for i := range payload.Ack {
+		ack := payload.Ack[i]
+		status := courier.MsgQueued
+
+		if ack.Status == "sent" {
+			status = courier.MsgSent
+		} else if ack.Status == "delivered" {
+			status = courier.MsgDelivered
+		}
+
+		event := h.Backend().NewMsgStatusForExternalID(channel, ack.ID, status)
+		err := h.Backend().WriteMsgStatus(ctx, event)
+
+		// we don't know about this message, just tell them we ignored it
+		if err == courier.ErrMsgNotFound {
+			data = append(data, courier.NewInfoData("message not found, ignored"))
+			continue
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, event)
+		data = append(data, courier.NewStatusData(event))
+
+	}
+
+	return events, courier.WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", data)
+
+}
+
+func (h *handler) sendMsgPart(msg Msg, apiURL string, payload *dataPayload) (string, *ChannelLog, error) {
 	jsonBody, err := json.Marshal(payload)
 	if err != nil {
 		log := NewChannelLog("unable to build JSON body", msg.Channel(), msg.ID(), "", "", NilStatusCode, "", "", time.Duration(0), err)
@@ -97,17 +195,27 @@ func (h *handler) sendMsgPart(msg Msg, apiURL string, payload interface{}) (stri
 func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	address := msg.Channel().Address()
 
-	data := map[string]string{
-		"id":           msg.ID().String(),
-		"text":         msg.Text(),
-		"to":           msg.URN().Path(),
-		"to_no_plus":   strings.Replace(msg.URN().Path(), "+", "", 1),
-		"from":         address,
-		"from_no_plus": strings.Replace(address, "+", "", 1),
-		"channel":      msg.Channel().UUID().String(),
+	data := &dataPayload{
+		ID:          msg.ID().String(),
+		Text:        msg.Text(),
+		To:          msg.URN().Path(),
+		ToNoPlus:    strings.Replace(msg.URN().Path(), "+", "", 1),
+		From:        address,
+		FromNoPlus:  strings.Replace(address, "+", "", 1),
+		Channel:     strings.Replace(address, "+", "", 1),
+		Metadata:    nil,
+		Attachments: nil,
 	}
 
-	// TODO Quick Replies and Attachments
+	if len(msg.QuickReplies()) > 0 {
+		quickReplies := make(map[string][]string, 0)
+		quickReplies["quick_replies"] = msg.QuickReplies()
+		data.Metadata = quickReplies
+	}
+
+	if len(msg.Attachments()) > 0 {
+		data.Attachments = msg.Attachments()
+	}
 
 	// the status that will be written for this message
 	status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), MsgErrored)
@@ -130,11 +238,25 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	return status, nil
 }
 
-type moPayload struct {
+type userPayload struct {
 	URN      string `json:"urn"`
 	Language string `json:"language"`
 }
 
-type responseRegister struct {
-	ContactUUID string `json:"contact_uuid"`
+type msgPayload struct {
+	Text     string `json:"text"`
+	UserURN  string `json:"userUrn"`
+	UserUUID string `json:"userUuid"`
+}
+
+type dataPayload struct {
+	ID          string
+	Text        string
+	To          string
+	ToNoPlus    string
+	From        string
+	FromNoPlus  string
+	Channel     string
+	Metadata    map[string][]string
+	Attachments []string
 }
