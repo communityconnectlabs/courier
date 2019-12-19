@@ -35,6 +35,8 @@ type Backend interface {
 	// RemoveURNFromcontact removes a URN from the passed in contact
 	RemoveURNfromContact(context context.Context, channel Channel, contact Contact, urn urns.URN) (urns.URN, error)
 
+	AddLanguageToContact(ctx context.Context, channel Channel, language string, contact Contact) (Contact, error)
+
 	// NewIncomingMsg creates a new message from the given params
 	NewIncomingMsg(channel Channel, urn urns.URN, text string) Msg
 
