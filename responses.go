@@ -177,12 +177,16 @@ func writeJSONResponse(ctx context.Context, w http.ResponseWriter, statusCode in
 
 // RegisteredContactData is our response payload for a channel event
 type RegisteredContactData struct {
-	ContactUUID string `json:"contact_uuid"`
+	ContactUUID  string `json:"contact_uuid"`
+	ContactToken string `json:"contact_token"`
+	ContactUrn   string `json:"contact_urn"`
 }
 
 // NewEventRegisteredContactData creates a new receive data for the passed in event
-func NewEventRegisteredContactData(c ContactUUID) RegisteredContactData {
+func NewEventRegisteredContactData(c ContactUUID, token string, urn string) RegisteredContactData {
 	return RegisteredContactData{
-		ContactUUID: c.String(),
+		ContactUUID:  c.String(),
+		ContactToken: token,
+		ContactUrn:   urn,
 	}
 }

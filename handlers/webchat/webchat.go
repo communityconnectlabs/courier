@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/dgrijalva/jwt-go"
 	. "github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/handlers"
 	"github.com/nyaruka/courier/utils"
 	"github.com/nyaruka/gocommon/urns"
 	"golang.org/x/text/language"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -42,16 +44,30 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
 
-	// no URN? ignore this
-	if payload.URN == "" {
-		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no identifier")
-	}
-
 	// the list of data we will return in our response
 	data := make([]interface{}, 0, 2)
 
-	// create our URN
-	urn, errURN := urns.NewURNFromParts(channel.Schemes()[0], payload.URN, "", "")
+	var urn urns.URN
+	var errURN error
+	var userToken string
+	if payload.UserToken == "" {
+		// no URN? ignore this
+		if payload.URN == "" {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no identifier")
+		}
+
+		// create our URN
+		urn, errURN = urns.NewURNFromParts(channel.Schemes()[0], payload.URN, "", "")
+		userToken = CreateToken(urn.String())
+	} else {
+		// decode token
+		userToken = payload.UserToken
+		urnString, err := urnFromToken(payload.UserToken)
+		if err == nil {
+			// get our urn from token
+			urn, errURN = urns.Parse(urnString)
+		}
+	}
 	if errURN != nil {
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errURN)
 	}
@@ -71,7 +87,7 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 	}
 
 	// build our response
-	data = append(data, NewEventRegisteredContactData(contact.UUID()))
+	data = append(data, NewEventRegisteredContactData(contact.UUID(), userToken, urn.Path()))
 
 	return nil, WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", data)
 }
@@ -186,9 +202,34 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	return status, nil
 }
 
+func CreateToken(userURN string) string {
+	var err error
+	tokenClaims := jwt.MapClaims{}
+	tokenClaims["authorized"] = true
+	tokenClaims["userURN"] = userURN
+	at := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenClaims)
+	token, err := at.SignedString([]byte(os.Getenv("WEBSOCKET_SERVER_SECRET")))
+	if err != nil {
+		return ""
+	}
+	return token
+}
+
+func urnFromToken(tokenString string) (string, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("WEBSOCKET_SERVER_SECRET")), nil
+	})
+	if err != nil {
+		return "", err
+	}
+	claims, _ := token.Claims.(jwt.MapClaims)
+	return claims["userURN"].(string), nil
+}
+
 type userPayload struct {
-	URN      string `json:"urn"`
-	Language string `json:"language"`
+	URN       string `json:"urn"`
+	Language  string `json:"language"`
+	UserToken string `json:"user_token"`
 }
 
 type msgPayload struct {
