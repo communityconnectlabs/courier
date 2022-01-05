@@ -283,7 +283,6 @@ func readMessagesFromDB(b *backend, channelID courier.ChannelID, contactID Conta
 
 	// read our URNs out
 	msgs := make([]*DBMsg, 0)
-	idx := 0
 	for rows.Next() {
 		msg := &DBMsg{}
 		err = rows.StructScan(msg)
@@ -291,7 +290,6 @@ func readMessagesFromDB(b *backend, channelID courier.ChannelID, contactID Conta
 			return nil, err
 		}
 		msgs = append(msgs, msg)
-		idx++
 	}
 	return msgs, nil
 }

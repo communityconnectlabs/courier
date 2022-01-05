@@ -12,7 +12,6 @@ import (
 	"github.com/nyaruka/gocommon/urns"
 	"golang.org/x/text/language"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -60,11 +59,11 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 
 		// create our URN
 		urn, errURN = urns.NewURNFromParts(channel.Schemes()[0], payload.URN, "", "")
-		userToken = CreateToken(urn.String())
+		userToken = CreateToken(urn.String(), h.Server().Config().WebChatServerSecret)
 	} else {
 		// decode token
 		userToken = payload.UserToken
-		urnString, err := urnFromToken(payload.UserToken)
+		urnString, err := urnFromToken(payload.UserToken, h.Server().Config().WebChatServerSecret)
 		if err == nil {
 			// get our urn from token
 			urn, errURN = urns.Parse(urnString)
@@ -129,7 +128,7 @@ func (h *handler) chatHistory(ctx context.Context, channel Channel, w http.Respo
 		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no contact token")
 	}
 
-	urnString, err := urnFromToken(payload.UserToken)
+	urnString, err := urnFromToken(payload.UserToken, h.Server().Config().WebChatServerSecret)
 	if err != nil {
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
@@ -276,22 +275,22 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	return status, nil
 }
 
-func CreateToken(userURN string) string {
+func CreateToken(userURN string, secret string) string {
 	var err error
 	tokenClaims := jwt.MapClaims{}
 	tokenClaims["authorized"] = true
 	tokenClaims["userURN"] = userURN
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenClaims)
-	token, err := at.SignedString([]byte(os.Getenv("WEBSOCKET_SERVER_SECRET")))
+	token, err := at.SignedString([]byte(secret))
 	if err != nil {
 		return ""
 	}
 	return token
 }
 
-func urnFromToken(tokenString string) (string, error) {
+func urnFromToken(tokenString string, secret string) (string, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("WEBSOCKET_SERVER_SECRET")), nil
+		return []byte(secret), nil
 	})
 	if err != nil {
 		return "", err
