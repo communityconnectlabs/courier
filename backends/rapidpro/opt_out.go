@@ -1,6 +1,9 @@
 package rapidpro
 
-import "strings"
+import (
+	"strings"
+	"reflect"
+)
 
 var keywords = [...]string{
 	"alisin",
@@ -99,9 +102,39 @@ var keywords = [...]string{
 }
 
 func checkOptOutKeywordPresence(text string) bool {
-	loweredText := strings.ToLower(text)
-	for _, keyword := range keywords {
-		if strings.Contains(loweredText, keyword) {
+	textWords := strings.Split(strings.ToLower(text), " ")
+	checkWords := make([]string, len(textWords))
+
+	for _, word := range textWords {
+		newWord := strings.ReplaceAll(word, "?", "")
+		newWord = strings.ReplaceAll(newWord, "!", "")
+		newWord = strings.ReplaceAll(newWord, ".", "")
+		newWord = strings.ReplaceAll(newWord, ",", "")
+		checkWords = append(checkWords, newWord)
+	}
+
+	return len(intersection(checkWords, keywords)) > 0
+}
+
+func intersection(a interface{}, b interface{}) []interface{} {
+	set := make([]interface{}, 0)
+	av := reflect.ValueOf(a)
+
+	for i := 0; i < av.Len(); i++ {
+		el := av.Index(i).Interface()
+		if contains(b, el) {
+			set = append(set, el)
+		}
+	}
+
+	return set
+}
+
+func contains(a interface{}, e interface{}) bool {
+	v := reflect.ValueOf(a)
+
+	for i := 0; i < v.Len(); i++ {
+		if v.Index(i).Interface() == e {
 			return true
 		}
 	}
