@@ -40,7 +40,6 @@ var keywords = [...]string{
 	"illegal",
 	"itigil",
 	"itigillahat",
-	"jesus",
 	"joder",
 	"kanselahin",
 	"kết",
