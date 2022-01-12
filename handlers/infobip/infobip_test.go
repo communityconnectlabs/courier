@@ -215,7 +215,9 @@ func BenchmarkHandler(b *testing.B) {
 
 // setSend takes care of setting the sendURL to call
 func setSendURL(s *httptest.Server, h courier.ChannelHandler, c courier.Channel, m courier.Msg) {
-	sendURL = s.URL
+	getSendURL = func (urlFromConfig string ) string {
+		return s.URL
+	}
 }
 
 var defaultSendTestCases = []ChannelSendTestCase{
@@ -226,7 +228,7 @@ var defaultSendTestCases = []ChannelSendTestCase{
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
 			"Accept":        "application/json",
-			"Authorization": "Basic VXNlcm5hbWU6UGFzc3dvcmQ=",
+			"Authorization": "App api_key",
 		},
 		RequestBody: `{"messages":[{"from":"2020","destinations":[{"to":"250788383383","messageId":"10"}],"text":"Simple Message","notifyContentType":"application/json","intermediateReport":true,"notifyUrl":"https://localhost/c/ib/8eb23e93-5ecb-45ba-b726-3b064e0c56ab/delivered"}]}`,
 		SendPrep:    setSendURL},
@@ -237,7 +239,7 @@ var defaultSendTestCases = []ChannelSendTestCase{
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
 			"Accept":        "application/json",
-			"Authorization": "Basic VXNlcm5hbWU6UGFzc3dvcmQ=",
+			"Authorization": "App api_key",
 		},
 		RequestBody: `{"messages":[{"from":"2020","destinations":[{"to":"250788383383","messageId":"10"}],"text":"☺","notifyContentType":"application/json","intermediateReport":true,"notifyUrl":"https://localhost/c/ib/8eb23e93-5ecb-45ba-b726-3b064e0c56ab/delivered"}]}`,
 		SendPrep:    setSendURL},
@@ -248,7 +250,7 @@ var defaultSendTestCases = []ChannelSendTestCase{
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
 			"Accept":        "application/json",
-			"Authorization": "Basic VXNlcm5hbWU6UGFzc3dvcmQ=",
+			"Authorization": "App api_key",
 		},
 		RequestBody: `{"messages":[{"from":"2020","destinations":[{"to":"250788383383","messageId":"10"}],"text":"My pic!\nhttps://foo.bar/image.jpg","notifyContentType":"application/json","intermediateReport":true,"notifyUrl":"https://localhost/c/ib/8eb23e93-5ecb-45ba-b726-3b064e0c56ab/delivered"}]}`,
 		SendPrep:    setSendURL},
@@ -259,7 +261,7 @@ var defaultSendTestCases = []ChannelSendTestCase{
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
 			"Accept":        "application/json",
-			"Authorization": "Basic VXNlcm5hbWU6UGFzc3dvcmQ=",
+			"Authorization": "App api_key",
 		},
 		RequestBody: `{"messages":[{"from":"2020","destinations":[{"to":"250788383383","messageId":"10"}],"text":"Error Message","notifyContentType":"application/json","intermediateReport":true,"notifyUrl":"https://localhost/c/ib/8eb23e93-5ecb-45ba-b726-3b064e0c56ab/delivered"}]}`,
 		SendPrep:    setSendURL},
@@ -270,7 +272,7 @@ var defaultSendTestCases = []ChannelSendTestCase{
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
 			"Accept":        "application/json",
-			"Authorization": "Basic VXNlcm5hbWU6UGFzc3dvcmQ=",
+			"Authorization": "App api_key",
 		},
 		RequestBody: `{"messages":[{"from":"2020","destinations":[{"to":"250788383383","messageId":"10"}],"text":"Simple Message","notifyContentType":"application/json","intermediateReport":true,"notifyUrl":"https://localhost/c/ib/8eb23e93-5ecb-45ba-b726-3b064e0c56ab/delivered"}]}`,
 		SendPrep:    setSendURL},
@@ -284,7 +286,7 @@ var transSendTestCases = []ChannelSendTestCase{
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
 			"Accept":        "application/json",
-			"Authorization": "Basic VXNlcm5hbWU6UGFzc3dvcmQ=",
+			"Authorization": "App api_key",
 		},
 		RequestBody: `{"messages":[{"from":"2020","destinations":[{"to":"250788383383","messageId":"10"}],"text":"Simple Message","notifyContentType":"application/json","intermediateReport":true,"notifyUrl":"https://localhost/c/ib/8eb23e93-5ecb-45ba-b726-3b064e0c56ab/delivered","transliteration":"COLOMBIAN"}]}`,
 		SendPrep:    setSendURL},
@@ -293,16 +295,16 @@ var transSendTestCases = []ChannelSendTestCase{
 func TestSending(t *testing.T) {
 	var defaultChannel = courier.NewMockChannel("8eb23e93-5ecb-45ba-b726-3b064e0c56ab", "IB", "2020", "US",
 		map[string]interface{}{
-			courier.ConfigPassword: "Password",
-			courier.ConfigUsername: "Username",
+			courier.ConfigSendURL: "xxxx.api.infobip.com",
+			courier.ConfigAPIKey: "api_key",
 		})
 
 	RunChannelSendTestCases(t, defaultChannel, newHandler(), defaultSendTestCases, nil)
 
 	var transChannel = courier.NewMockChannel("8eb23e93-5ecb-45ba-b726-3b064e0c56ab", "IB", "2020", "US",
 		map[string]interface{}{
-			courier.ConfigPassword: "Password",
-			courier.ConfigUsername: "Username",
+			courier.ConfigSendURL: "xxxx.api.infobip.com",
+			courier.ConfigAPIKey: "api_key",
 			configTransliteration:  "COLOMBIAN",
 		})
 
