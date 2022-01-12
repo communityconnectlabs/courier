@@ -16,8 +16,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var sendURL = "" // added here to override for testing
-
 const configTransliteration = "transliteration"
 
 func init() {
@@ -208,11 +206,9 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 	}
 
 	// build our request
-	var authorization = fmt.Sprintf("App %s", msg.Channel().StringConfigForKey(courier.ConfigAPIKey, ""))
-	if sendURL == "" {
-		urlFromConfig := msg.Channel().StringConfigForKey(courier.ConfigSendURL, "")
-		sendURL = fmt.Sprintf("%s/sms/2/text/advanced", urlFromConfig)
-	}
+	authorization := fmt.Sprintf("App %s", msg.Channel().StringConfigForKey(courier.ConfigAPIKey, ""))
+	sendURL := getSendURL(msg.Channel().StringConfigForKey(courier.ConfigSendURL, ""))
+
 	req, err := http.NewRequest(http.MethodPost, sendURL, requestBody)
 	if err != nil {
 		return nil, err
@@ -295,4 +291,8 @@ type mtMessage struct {
 type mtDestination struct {
 	To        string `json:"to"`
 	MessageID string `json:"messageId"`
+}
+
+var getSendURL = func (urlFromConfig string) string  {
+	return fmt.Sprintf("%s/sms/2/text/advanced", urlFromConfig)
 }
