@@ -41,6 +41,9 @@ type Backend interface {
 	// AddLanguageToContact adds a language to a contact
 	AddLanguageToContact(ctx context.Context, channel Channel, language string, contact Contact) (Contact, error)
 
+	// GetContactMessages load all messages by channel and contact
+	GetContactMessages(channel Channel, contact Contact) ([]Msg, error)
+
 	// NewIncomingMsg creates a new message from the given params
 	NewIncomingMsg(channel Channel, urn urns.URN, text string) Msg
 

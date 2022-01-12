@@ -244,6 +244,56 @@ func readMsgFromDB(b *backend, id courier.MsgID) (*DBMsg, error) {
 	return m, err
 }
 
+// GetContactMessages
+const selectContactMessagesSQL = `
+SELECT
+	org_id,
+	direction,
+	text,
+	attachments,
+	msg_count,
+	error_count,
+	high_priority,
+	status,
+	visibility,
+	external_id,
+	channel_id,
+	contact_id,
+	contact_urn_id,
+	created_on,
+	modified_on,
+	next_attempt,
+	queued_on,
+	sent_on
+FROM
+	msgs_msg m
+WHERE
+	m.contact_id = $1 AND
+	m.channel_id = $2
+ORDER BY
+	created_on ASC
+`
+
+func readMessagesFromDB(b *backend, channelID courier.ChannelID, contactID ContactID) ([]*DBMsg, error) {
+	rows, err := b.db.Queryx(selectContactMessagesSQL, contactID, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// read our URNs out
+	msgs := make([]*DBMsg, 0)
+	for rows.Next() {
+		msg := &DBMsg{}
+		err = rows.StructScan(msg)
+		if err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs, nil
+}
+
 //-----------------------------------------------------------------------------
 // Media download and classification
 //-----------------------------------------------------------------------------

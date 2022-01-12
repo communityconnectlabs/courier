@@ -388,6 +388,10 @@ func (mb *MockBackend) WriteMsgSegments(ctx context.Context, m Msg) error {
 	return nil
 }
 
+func (mb *MockBackend) GetContactMessages(channel Channel, contact Contact) ([]Msg, error) {
+	return nil, nil
+}
+
 func buildMockBackend(config *Config) Backend {
 	return NewMockBackend()
 }
@@ -626,7 +630,7 @@ func (m *mockMsg) WithAttachment(url string) Msg {
 	return m
 }
 func (m *mockMsg) WithMetadata(metadata json.RawMessage) Msg { m.metadata = metadata; return m }
-func (m *mockMsg) WithSegmentsCount(segments int) Msg { m.segments = segments; return m }
+func (m *mockMsg) WithSegmentsCount(segments int) Msg        { m.segments = segments; return m }
 
 //-----------------------------------------------------------------------------
 // Mock status implementation
