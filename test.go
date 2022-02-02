@@ -128,6 +128,11 @@ func (mb *MockBackend) NewOutgoingMsg(channel Channel, id MsgID, urn urns.URN, t
 	return &mockMsg{channel: channel, id: id, urn: urn, text: text, highPriority: highPriority, quickReplies: quickReplies, topic: topic, responseToID: msgResponseToID, responseToExternalID: responseToExternalID}
 }
 
+// NewMsgOutgoing creates a new outgoing message from the given params
+func (mb *MockBackend) NewMsgOutgoing(channel Channel, urn urns.URN, text string) Msg {
+	return &mockMsg{channel: channel, urn: urn, text: text}
+}
+
 // PushOutgoingMsg is a test method to add a message to our queue of messages to send
 func (mb *MockBackend) PushOutgoingMsg(msg Msg) {
 	mb.mutex.Lock()
@@ -626,7 +631,7 @@ func (m *mockMsg) WithAttachment(url string) Msg {
 	return m
 }
 func (m *mockMsg) WithMetadata(metadata json.RawMessage) Msg { m.metadata = metadata; return m }
-func (m *mockMsg) WithSegmentsCount(segments int) Msg { m.segments = segments; return m }
+func (m *mockMsg) WithSegmentsCount(segments int) Msg        { m.segments = segments; return m }
 
 //-----------------------------------------------------------------------------
 // Mock status implementation

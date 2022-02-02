@@ -156,6 +156,11 @@ func (b *backend) NewOutgoingMsg(channel courier.Channel, urn urns.URN, text str
 	return newMsg(MsgOutgoing, channel, urn, text)
 }
 
+// NewMsgOutgoing creates a new outgoing message from the given params
+func (b *backend) NewMsgOutgoing(channel courier.Channel, urn urns.URN, text string) courier.Msg {
+	return newMsg(MsgOutgoing, channel, urn, text)
+}
+
 // PopNextOutgoingMsg pops the next message that needs to be sent
 func (b *backend) PopNextOutgoingMsg(ctx context.Context) (courier.Msg, error) {
 	// pop the next message off our queue
@@ -312,7 +317,7 @@ func (b *backend) MarkOutgoingMsgComplete(ctx context.Context, msg courier.Msg, 
 func (b *backend) WriteMsg(ctx context.Context, m courier.Msg) error {
 	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
 	defer cancel()
-	if checkOptOutKeywordPresence(m.Text()) {
+	if utils.CheckOptOutKeywordPresence(m.Text()) {
 		event := b.NewChannelEvent(m.Channel(), courier.StopConversation, m.URN()).WithExtra(map[string]interface{}{
 			"opt_out_message":  m.Text(),
 			"opt_out_datetime": m.ReceivedOn(),
