@@ -47,8 +47,8 @@ type Backend interface {
 	// NewIncomingMsg creates a new message from the given params
 	NewIncomingMsg(channel Channel, urn urns.URN, text string) Msg
 
-	// NewMsgOutgoing creates a new outgoing message from the given params
-	NewMsgOutgoing(channel Channel, urn urns.URN, text string) Msg
+	// NewOutgoingMsg creates a new outgoing message from the given params
+	NewOutgoingMsg(channel Channel, id MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToID int64, responseToExternalID string) Msg
 
 	// WriteMsg writes the passed in message to our backend
 	WriteMsg(context.Context, Msg) error

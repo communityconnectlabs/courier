@@ -139,7 +139,9 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 	// check whether it's a short code and the text contains opt-out words
 	if len(channel.Address()) <= 6 && utils.CheckOptOutKeywordPresence(msg.Text()) {
 		textMessage := channel.OrgConfigForKey(utils.OptOutMessageBackKey, utils.OptOutDefaultMessageBack)
-		msgBack := h.Backend().NewMsgOutgoing(channel, urn, textMessage.(string))
+		msgBack := h.Backend().NewOutgoingMsg(
+			channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", 0, "",
+		)
 		status, err := h.SendMsg(ctx, msgBack)
 		if err != nil {
 			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)

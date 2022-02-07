@@ -168,12 +168,7 @@ func (b *backend) NewIncomingMsg(channel courier.Channel, urn urns.URN, text str
 }
 
 // NewOutgoingMsg creates a new outgoing message from the given params
-func (b *backend) NewOutgoingMsg(channel courier.Channel, urn urns.URN, text string) courier.Msg {
-	return newMsg(MsgOutgoing, channel, urn, text)
-}
-
-// NewMsgOutgoing creates a new outgoing message from the given params
-func (b *backend) NewMsgOutgoing(channel courier.Channel, urn urns.URN, text string) courier.Msg {
+func (b *backend) NewOutgoingMsg(channel courier.Channel, id courier.MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToID int64, responseToExternalID string) courier.Msg {
 	return newMsg(MsgOutgoing, channel, urn, text)
 }
 
