@@ -393,6 +393,10 @@ func (mb *MockBackend) WriteMsgSegments(ctx context.Context, m Msg) error {
 	return nil
 }
 
+func (mb *MockBackend) GetContactMessages(channel Channel, contact Contact) ([]Msg, error) {
+	return nil, nil
+}
+
 func buildMockBackend(config *Config) Backend {
 	return NewMockBackend()
 }

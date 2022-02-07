@@ -130,6 +130,22 @@ func (b *backend) AddLanguageToContact(ctx context.Context, c courier.Channel, l
 	return contact, nil
 }
 
+// GetContactMessages load all messages by channel and contact
+func (b *backend) GetContactMessages(channel courier.Channel, contact courier.Contact) ([]courier.Msg, error) {
+	dbChannel := channel.(*DBChannel)
+	dbContact := contact.(*DBContact)
+	dbMsgs, err := readMessagesFromDB(b, dbChannel.ID_, dbContact.ID_)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := make([]courier.Msg, 0)
+	for _, dbMsg := range dbMsgs {
+		messages = append(messages, courier.Msg(dbMsg))
+	}
+	return messages, nil
+}
+
 // NewIncomingMsg creates a new message from the given params
 func (b *backend) NewIncomingMsg(channel courier.Channel, urn urns.URN, text string) courier.Msg {
 	// remove any control characters

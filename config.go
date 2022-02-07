@@ -29,6 +29,7 @@ type Config struct {
 	StatusPassword            string `help:"the password that is needed to authenticate against the /status endpoint"`
 	LogLevel                  string `help:"the logging level courier should use"`
 	Version                   string `help:"the version that will be used in request and response headers"`
+	WebChatServerSecret       string `help:"key for encoding the websocket tokens"`
 
 	// IncludeChannels is the list of channels to enable, empty means include all
 	IncludeChannels []string
@@ -60,6 +61,7 @@ func NewConfig() *Config {
 		MaxWorkers:                32,
 		LogLevel:                  "error",
 		Version:                   "Dev",
+		WebChatServerSecret:       "",
 	}
 }
 

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/dgrijalva/jwt-go"
 	. "github.com/nyaruka/courier"
+	"github.com/nyaruka/courier/backends/rapidpro"
 	"github.com/nyaruka/courier/handlers"
 	"github.com/nyaruka/courier/utils"
 	"github.com/nyaruka/gocommon/urns"
@@ -31,6 +33,7 @@ func (h *handler) Initialize(s Server) error {
 	h.SetServer(s)
 	s.AddHandlerRoute(h, http.MethodPost, "register", h.registerUser)
 	s.AddHandlerRoute(h, http.MethodPost, "receive", h.receiveMessage)
+	s.AddHandlerRoute(h, http.MethodPost, "history", h.chatHistory)
 	return nil
 }
 
@@ -42,16 +45,30 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
 
-	// no URN? ignore this
-	if payload.URN == "" {
-		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no identifier")
-	}
-
 	// the list of data we will return in our response
 	data := make([]interface{}, 0, 2)
 
-	// create our URN
-	urn, errURN := urns.NewURNFromParts(channel.Schemes()[0], payload.URN, "", "")
+	var urn urns.URN
+	var errURN error
+	var userToken string
+	if payload.UserToken == "" {
+		// no URN? ignore this
+		if payload.URN == "" {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no identifier")
+		}
+
+		// create our URN
+		urn, errURN = urns.NewURNFromParts(channel.Schemes()[0], payload.URN, "", "")
+		userToken = CreateToken(urn.String(), h.Server().Config().WebChatServerSecret)
+	} else {
+		// decode token
+		userToken = payload.UserToken
+		urnString, err := urnFromToken(payload.UserToken, h.Server().Config().WebChatServerSecret)
+		if err == nil {
+			// get our urn from token
+			urn, errURN = urns.Parse(urnString)
+		}
+	}
 	if errURN != nil {
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errURN)
 	}
@@ -71,7 +88,7 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 	}
 
 	// build our response
-	data = append(data, NewEventRegisteredContactData(contact.UUID()))
+	data = append(data, NewEventRegisteredContactData(contact.UUID(), userToken, urn.Path()))
 
 	return nil, WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", data)
 }
@@ -102,6 +119,78 @@ func (h *handler) receiveMessage(ctx context.Context, channel Channel, w http.Re
 	}
 
 	return handlers.WriteMsgsAndResponse(ctx, h, []Msg{msg}, w, r)
+}
+
+func (h *handler) chatHistory(ctx context.Context, channel Channel, w http.ResponseWriter, r *http.Request) ([]Event, error) {
+	payload := &userPayload{}
+	err := handlers.DecodeAndValidateJSON(payload, r)
+	if err != nil || payload.UserToken == "" {
+		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no contact token")
+	}
+
+	urnString, err := urnFromToken(payload.UserToken, h.Server().Config().WebChatServerSecret)
+	if err != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	}
+
+	urn, errURN := urns.Parse(urnString)
+	if errURN != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errURN)
+	}
+
+	contact, errGetContact := h.Backend().GetContact(ctx, channel, urn, "", "")
+	if errGetContact != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errGetContact)
+	}
+
+	msgs, err := h.Backend().GetContactMessages(channel, contact)
+	if err != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	}
+
+	// the list of data we will return in our response
+	responseMsgs := make([]*webChatMessagePayload, 0)
+	for _, msg := range msgs {
+		origin := "user"
+		msgDirection := msg.(*rapidpro.DBMsg).Direction_
+		if msgDirection == "O" {
+			origin = "ws"
+		}
+		responseMsg := &webChatMessagePayload{
+			Message:     msg.Text(),
+			Origin:      origin,
+			Metadata:    nil,
+			Attachments: nil,
+		}
+
+		metadata := make(map[string]interface{}, 0)
+
+		if len(msg.QuickReplies()) > 0 {
+			buildQuickReplies := make([]string, 0)
+			for _, item := range msg.QuickReplies() {
+				item = strings.ReplaceAll(item, "\\/", "/")
+				item = strings.ReplaceAll(item, "\\\"", "\"")
+				item = strings.ReplaceAll(item, "\\\\", "\\")
+				buildQuickReplies = append(buildQuickReplies, item)
+			}
+			metadata["quick_replies"] = buildQuickReplies
+		}
+
+		if len(msg.Attachments()) > 0 {
+			responseMsg.Attachments = msg.Attachments()
+		}
+
+		if msg.ReceiveAttachment() != "" {
+			metadata["receive_attachment"] = msg.ReceiveAttachment()
+		}
+
+		if msg.SharingConfig() != nil {
+			metadata["sharing_config"] = msg.SharingConfig()
+		}
+		responseMsg.Metadata = metadata
+		responseMsgs = append(responseMsgs, responseMsg)
+	}
+	return nil, WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", []interface{}{responseMsgs})
 }
 
 func (h *handler) sendMsgPart(msg Msg, apiURL string, payload *dataPayload) (string, *ChannelLog, error) {
@@ -186,9 +275,34 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	return status, nil
 }
 
+func CreateToken(userURN string, secret string) string {
+	var err error
+	tokenClaims := jwt.MapClaims{}
+	tokenClaims["authorized"] = true
+	tokenClaims["userURN"] = userURN
+	at := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenClaims)
+	token, err := at.SignedString([]byte(secret))
+	if err != nil {
+		return ""
+	}
+	return token
+}
+
+func urnFromToken(tokenString string, secret string) (string, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return "", err
+	}
+	claims, _ := token.Claims.(jwt.MapClaims)
+	return claims["userURN"].(string), nil
+}
+
 type userPayload struct {
-	URN      string `json:"urn"`
-	Language string `json:"language"`
+	URN       string `json:"urn"`
+	Language  string `json:"language"`
+	UserToken string `json:"user_token"`
 }
 
 type msgPayload struct {
@@ -205,6 +319,13 @@ type dataPayload struct {
 	From        string                 `json:"from"`
 	FromNoPlus  string                 `json:"from_no_plus"`
 	Channel     string                 `json:"channel"`
+	Metadata    map[string]interface{} `json:"metadata"`
+	Attachments []string               `json:"attachments"`
+}
+
+type webChatMessagePayload struct {
+	Message     string                 `json:"message"`
+	Origin      string                 `json:"origin"`
 	Metadata    map[string]interface{} `json:"metadata"`
 	Attachments []string               `json:"attachments"`
 }
