@@ -1,4 +1,4 @@
-package rapidpro
+package utils
 
 import "testing"
 
@@ -30,8 +30,8 @@ func Test_checkOptOutKeywordPresence(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := checkOptOutKeywordPresence(tt.args.text); got != tt.want {
-				t.Errorf("checkOptOutKeywordPresence() = %v, want %v", got, tt.want)
+			if got := CheckOptOutKeywordPresence(tt.args.text); got != tt.want {
+				t.Errorf("CheckOptOutKeywordPresence() = %v, want %v", got, tt.want)
 			}
 		})
 	}
