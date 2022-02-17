@@ -151,11 +151,19 @@ func (mb *MockBackend) PopNextOutgoingMsg(ctx context.Context) (Msg, error) {
 }
 
 // WasMsgSent returns whether the passed in msg was already sent
-func (mb *MockBackend) WasMsgSent(ctx context.Context, msg Msg) (bool, error) {
+func (mb *MockBackend) WasMsgSent(ctx context.Context, id MsgID) (bool, error) {
 	mb.mutex.Lock()
 	defer mb.mutex.Unlock()
 
-	return mb.sentMsgs[msg.ID()], nil
+	return mb.sentMsgs[id], nil
+}
+
+func (mb *MockBackend) ClearMsgSent(ctx context.Context, id MsgID) error {
+	mb.mutex.Lock()
+	defer mb.mutex.Unlock()
+
+	delete(mb.sentMsgs, id)
+	return nil
 }
 
 // IsMsgLoop returns whether the passed in msg is a loop
@@ -586,6 +594,7 @@ type mockMsg struct {
 	metadata             json.RawMessage
 	segments             int
 	alreadyWritten       bool
+	isResend             bool
 	receiveAttachment    string
 	sharingConfig        json.RawMessage
 
@@ -596,22 +605,23 @@ type mockMsg struct {
 
 func (m *mockMsg) SessionStatus() string { return "" }
 
-func (m *mockMsg) Channel() Channel               { return m.channel }
-func (m *mockMsg) ID() MsgID                      { return m.id }
-func (m *mockMsg) EventID() int64                 { return int64(m.id) }
-func (m *mockMsg) UUID() MsgUUID                  { return m.uuid }
-func (m *mockMsg) Text() string                   { return m.text }
-func (m *mockMsg) Attachments() []string          { return m.attachments }
-func (m *mockMsg) ExternalID() string             { return m.externalID }
-func (m *mockMsg) URN() urns.URN                  { return m.urn }
-func (m *mockMsg) URNAuth() string                { return m.urnAuth }
-func (m *mockMsg) ContactName() string            { return m.contactName }
-func (m *mockMsg) HighPriority() bool             { return m.highPriority }
-func (m *mockMsg) QuickReplies() []string         { return m.quickReplies }
-func (m *mockMsg) Topic() string                  { return m.topic }
-func (m *mockMsg) ResponseToID() MsgID            { return m.responseToID }
-func (m *mockMsg) ResponseToExternalID() string   { return m.responseToExternalID }
-func (m *mockMsg) Metadata() json.RawMessage      { return m.metadata }
+func (m *mockMsg) Channel() Channel             { return m.channel }
+func (m *mockMsg) ID() MsgID                    { return m.id }
+func (m *mockMsg) EventID() int64               { return int64(m.id) }
+func (m *mockMsg) UUID() MsgUUID                { return m.uuid }
+func (m *mockMsg) Text() string                 { return m.text }
+func (m *mockMsg) Attachments() []string        { return m.attachments }
+func (m *mockMsg) ExternalID() string           { return m.externalID }
+func (m *mockMsg) URN() urns.URN                { return m.urn }
+func (m *mockMsg) URNAuth() string              { return m.urnAuth }
+func (m *mockMsg) ContactName() string          { return m.contactName }
+func (m *mockMsg) HighPriority() bool           { return m.highPriority }
+func (m *mockMsg) QuickReplies() []string       { return m.quickReplies }
+func (m *mockMsg) Topic() string                { return m.topic }
+func (m *mockMsg) ResponseToID() MsgID          { return m.responseToID }
+func (m *mockMsg) ResponseToExternalID() string { return m.responseToExternalID }
+func (m *mockMsg) Metadata() json.RawMessage    { return m.metadata }
+func (m *mockMsg) IsResend() bool               { return m.isResend }
 func (m *mockMsg) ReceiveAttachment() string      { return m.receiveAttachment }
 func (m *mockMsg) SharingConfig() json.RawMessage { return m.sharingConfig }
 
