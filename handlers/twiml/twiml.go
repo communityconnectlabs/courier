@@ -196,6 +196,11 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 	if status == nil {
 		status = h.Backend().NewMsgStatusForExternalID(channel, form.MessageSID, msgStatus)
 	}
+
+	if status.ID() == courier.NilMsgID {
+		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
+	}
+
 	return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 }
 
