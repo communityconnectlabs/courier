@@ -113,7 +113,6 @@ func newMsg(direction MsgDirection, channel courier.Channel, urn urns.URN, text 
 
 		URN_:          urn,
 		MessageCount_: 1,
-		Segments_:     0,
 
 		NextAttempt_: now,
 		CreatedOn_:   now,
@@ -128,9 +127,9 @@ func newMsg(direction MsgDirection, channel courier.Channel, urn urns.URN, text 
 
 const insertMsgSQL = `
 INSERT INTO
-	msgs_msg(org_id, uuid, direction, text, attachments, msg_count, error_count, high_priority, status, segments,
+	msgs_msg(org_id, uuid, direction, text, attachments, msg_count, error_count, high_priority, status,
              visibility, external_id, channel_id, contact_id, contact_urn_id, created_on, modified_on, next_attempt, queued_on, sent_on)
-    VALUES(:org_id, :uuid, :direction, :text, :attachments, :msg_count, :error_count, :high_priority, :status, :segments,
+    VALUES(:org_id, :uuid, :direction, :text, :attachments, :msg_count, :error_count, :high_priority, :status,
            :visibility, :external_id, :channel_id, :contact_id, :contact_urn_id, :created_on, :modified_on, :next_attempt, :queued_on, :sent_on)
 RETURNING id
 `
@@ -172,17 +171,6 @@ func writeMsgToDB(ctx context.Context, b *backend, m *DBMsg) error {
 	}
 
 	return nil
-}
-
-const updateMsgSegments = `
-UPDATE msgs_msg SET segments=:segments WHERE msgs_msg.id=:id;
-`
-
-// WriteMsgSegments
-func writeMsgSegments(ctx context.Context, b *backend, msg courier.Msg) error {
-	m := msg.(*DBMsg)
-	_, err := b.db.NamedExecContext(ctx, updateMsgSegments, m)
-	return err
 }
 
 const selectMsgSQL = `
@@ -603,7 +591,6 @@ type DBMsg struct {
 	ResponseToExternalID_ string                 `json:"response_to_external_id"`
 	IsResend_             bool                   `json:"is_resend,omitempty"`
 	Metadata_             json.RawMessage        `json:"metadata"        db:"metadata"`
-	Segments_             int                    `json:"segments"        db:"segments"`
 
 	ChannelID_    courier.ChannelID `json:"channel_id"      db:"channel_id"`
 	ContactID_    ContactID         `json:"contact_id"      db:"contact_id"`
@@ -732,11 +719,5 @@ func (m *DBMsg) WithAttachment(url string) courier.Msg {
 // WithURNAuth can be used to add a URN auth setting to a message
 func (m *DBMsg) WithURNAuth(auth string) courier.Msg {
 	m.URNAuth_ = auth
-	return m
-}
-
-// WithSegmentsCount can be used to add a segments count to a message
-func (m *DBMsg) WithSegmentsCount(segments int) courier.Msg {
-	m.Segments_ = segments
 	return m
 }

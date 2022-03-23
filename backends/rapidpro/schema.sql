@@ -78,8 +78,7 @@ CREATE TABLE msgs_msg (
     contact_urn_id integer NOT NULL references contacts_contacturn(id) on delete cascade,
     org_id integer NOT NULL references orgs_org(id) on delete cascade,
     metadata text,
-    topup_id integer,
-    segments smallint constraint msgs_msg_segments_check check (segments >= 0)
+    topup_id integer
 );
 
 DROP TABLE IF EXISTS channels_channellog CASCADE;
