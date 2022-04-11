@@ -753,7 +753,7 @@ func (b *backend) Start() error {
 		if err != nil {
 			return err
 		}
-		b.storage = storage.NewS3(s3Client, b.config.S3MediaBucket)
+		b.storage = storage.NewPrivateS3(s3Client, b.config.S3MediaBucket, b.config.S3PublicAccessEndpoint)
 	} else {
 		b.storage = storage.NewFS("_storage")
 	}

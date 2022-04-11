@@ -12,6 +12,7 @@ type Config struct {
 	DB                        string `help:"URL describing how to connect to the RapidPro database"`
 	Redis                     string `help:"URL describing how to connect to Redis"`
 	SpoolDir                  string `help:"the local directory where courier will write statuses or msgs that need to be retried (needs to be writable)"`
+	S3PublicAccessEndpoint    string `help:"the public endpoint that can be used to get the private files"`
 	S3Endpoint                string `help:"the S3 endpoint we will write attachments to"`
 	S3Region                  string `help:"the S3 region we will write attachments to"`
 	S3MediaBucket             string `help:"the S3 bucket we will write attachments to"`
@@ -48,6 +49,7 @@ func NewConfig() *Config {
 		DB:                        "postgres://temba:temba@localhost/temba?sslmode=disable",
 		Redis:                     "redis://localhost:6379/15",
 		SpoolDir:                  "/var/spool/courier",
+		S3PublicAccessEndpoint:    "http://localhost:8000/storage",
 		S3Endpoint:                "https://s3.amazonaws.com",
 		S3Region:                  "us-east-1",
 		S3MediaBucket:             "courier-media",

@@ -1,5 +1,7 @@
 module github.com/nyaruka/courier
 
+replace github.com/nyaruka/gocommon => github.com/greatnonprofits-nfp/gocommon v1.6.2
+
 require (
 	github.com/antchfx/xmlquery v0.0.0-20181223105952-355641961c92
 	github.com/antchfx/xpath v0.0.0-20181208024549-4bbdf6db12aa // indirect
