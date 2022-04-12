@@ -1,13 +1,13 @@
 package webchat
 
 import (
+	"encoding/json"
 	"github.com/nyaruka/courier"
 	. "github.com/nyaruka/courier/handlers"
-	"testing"
-	"net/http/httptest"
 	"github.com/nyaruka/courier/utils"
 	"github.com/nyaruka/gocommon/urns"
-	"encoding/json"
+	"net/http/httptest"
+	"testing"
 )
 
 var msgExample = `{
@@ -44,6 +44,15 @@ var userInvalidPayloadExample = `{
 var userWrongLangExample = `{
  	"language": "portuguese"
 }`
+
+var userWithValidToken = `{
+	"user_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyVVJOIjoidGVsOisyMzQ4MDY3ODg2NTY1In0.ls2xClh_8-Rt2b8QZ7S6QwcmDGFhza1Hboqc5RhJmBI",
+	"language": "en-US",
+	"urn": "asldkfjpoawije"
+}`
+
+var userWithInvalidToken = `{"user_token": "invalid-token"}`
+var userWithNoTken = `{}`
 
 var testCases = []ChannelHandleTestCase{
 	{
@@ -95,6 +104,27 @@ var testCases = []ChannelHandleTestCase{
 		URL:    "/c/wch/8eb23e93-5ecb-45ba-b726-3b064e0c567b/register/",
 		Data:   userWrongLangExample,
 		Status: 200,
+	},
+	{
+		Label:    "View history",
+		URL:      "/c/wch/8eb23e93-5ecb-45ba-b726-3b064e0c567b/history/",
+		Data:     userWithValidToken,
+		Status:   200,
+		Response: "Events Handled",
+	},
+	{
+		Label:    "View history",
+		URL:      "/c/wch/8eb23e93-5ecb-45ba-b726-3b064e0c567b/history/",
+		Data:     userWithInvalidToken,
+		Status:   400,
+		Response: "Error",
+	},
+	{
+		Label:    "View history",
+		URL:      "/c/wch/8eb23e93-5ecb-45ba-b726-3b064e0c567b/history/",
+		Data:     userWithNoTken,
+		Status:   200,
+		Response: "Ignored",
 	},
 }
 
