@@ -161,3 +161,12 @@ func TestHandling(t *testing.T) {
 	log, _ := mb.GetLastChannelLog()
 	assert.NotContains(log.Request, "secret")
 }
+
+func TestGetHandler(t *testing.T) {
+	// will get already registered handler from cache or from db
+	h := GetHandler("DM")
+	assert.NotNil(t, h)
+
+	h = GetHandler("NOT_REG")
+	assert.Nil(t, h)
+}
