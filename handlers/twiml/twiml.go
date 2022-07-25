@@ -147,11 +147,10 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 		msgBack := h.Backend().NewOutgoingMsg(
 			channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", 0, "",
 		)
-		status, err := h.SendMsg(ctx, msgBack)
+		_, err := h.SendMsg(ctx, msgBack)
 		if err != nil {
 			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 		}
-		h.Backend().MarkOutgoingMsgComplete(ctx, msg, status)
 	}
 
 	// process any attached media
@@ -202,6 +201,11 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 	if status == nil {
 		status = h.Backend().NewMsgStatusForExternalID(channel, form.MessageSID, msgStatus)
 	}
+
+	if status.ID() == courier.NilMsgID && status.ExternalID() == "" {
+		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
+	}
+
 	return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 }
 
