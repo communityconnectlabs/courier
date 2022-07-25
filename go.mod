@@ -9,7 +9,7 @@ require (
 	github.com/buger/jsonparser v0.0.0-20180318095312-2cac668e8456
 	github.com/certifi/gocertifi v0.0.0-20180118203423-deb3ae2ef261 // indirect
 	github.com/dghubble/oauth1 v0.4.0
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/evalphobia/logrus_sentry v0.4.6
 	github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible
