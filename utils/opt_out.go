@@ -1,4 +1,4 @@
-package rapidpro
+package utils
 
 import (
 	"strings"
@@ -100,7 +100,11 @@ var keywords = [...]string{
 	"취소",
 }
 
-func checkOptOutKeywordPresence(text string) bool {
+const OptOutMessageBackKey = "opt_out_message_back"
+const OptOutDefaultMessageBack = "If this is an emergency, call 911. For more help from CCL contact support@communityconnectlabs.com. Msg freq. varies. Reply STOP to cancel."
+
+// CheckOptOutKeywordPresence is used to check the text contains opt-out words
+func CheckOptOutKeywordPresence(text string) bool {
 	textWords := strings.Split(strings.ToLower(text), " ")
 	checkWords := make([]string, len(textWords))
 
