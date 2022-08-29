@@ -23,6 +23,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348 // indirect
 	github.com/lib/pq v1.0.0
+	github.com/linxGnu/gosmpp v0.1.4-rc29
 	github.com/mattn/go-sqlite3 v1.10.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/nyaruka/ezconf v0.2.1
@@ -32,8 +33,8 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.4.2
-	github.com/stretchr/testify v1.6.1
-	golang.org/x/text v0.3.3
+	github.com/stretchr/testify v1.7.0
+	golang.org/x/text v0.3.7
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1
 	gopkg.in/go-playground/validator.v9 v9.11.0

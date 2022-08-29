@@ -52,7 +52,7 @@ import (
 	_ "github.com/nyaruka/courier/handlers/redrabbit"
 	_ "github.com/nyaruka/courier/handlers/rocketchat"
 	_ "github.com/nyaruka/courier/handlers/shaqodoon"
-	_ "github.com/nyaruka/courier/handlers/smpp"
+	_ "github.com/nyaruka/courier/handlers/mgage"
 	_ "github.com/nyaruka/courier/handlers/smscentral"
 	_ "github.com/nyaruka/courier/handlers/start"
 	_ "github.com/nyaruka/courier/handlers/telegram"

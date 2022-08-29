@@ -1,4 +1,4 @@
-package smpp
+package mgage
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ type handler struct {
 }
 
 func newHandler() courier.ChannelHandler {
-	return &handler{handlers.NewBaseHandler("SMP", "SMPP")}
+	return &handler{handlers.NewBaseHandler("MGA", "mGage")}
 }
 
 // Initialize is called by the engine once everything is loaded
@@ -37,7 +37,7 @@ func (h *handler) Initialize(s courier.Server) error {
 
 func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStatus, error) {
 	if msg.URN().Scheme() != urns.TelScheme {
-		return nil, fmt.Errorf("wrong urn scheme for the current SMPP channel type")
+		return nil, fmt.Errorf("wrong urn scheme for the current mGage channel type")
 	}
 
 	msgEncoding := GSM7
@@ -57,12 +57,11 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 				Receiver: msg.URN().Path(),
 				Text:     part,
 				Encoding: string(msgEncoding),
-				PartNum: index + 1,
-				Parts: partsLength,
+				PartNum:  index + 1,
+				Parts:    partsLength,
 			}
 
 			rr, err := h.sendToSMPP(payload)
-			// todo: add here code for storing the sequence number so later message can be tracked
 			log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
 			status.AddLog(log)
 		}
@@ -74,11 +73,10 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 			Receiver: msg.URN().Path(),
 			Text:     msg.Text(),
 			Encoding: string(msgEncoding),
-			PartNum: 1,
-			Parts: 1,
+			PartNum:  1,
+			Parts:    1,
 		}
 		rr, err := h.sendToSMPP(payload)
-		// todo: add here code for storing the sequence number so later message can be tracked
 		status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
 		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
 		status.AddLog(log)
@@ -108,7 +106,7 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 }
 
 func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
-	// if the message id was passed explicitely, use that
+	// if the message id was passed explicitly, use that
 	var status courier.MsgStatus
 	idString := r.URL.Query().Get("id")
 	if idString != "" {
@@ -134,9 +132,9 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 
 func (h *handler) shouldSplit(text string, encoding MsgEncoding) (shouldSplit bool) {
 	if encoding == UCS2 {
-		return uint(len(text)*2) > SM_MSG_LEN
+		return uint(len(text)*2) > SmMsgLen
 	}
-	return uint(len(text)) > SM_MSG_LEN
+	return uint(len(text)) > SmMsgLen
 }
 
 func (h *handler) encodeSplit(text string, encoding MsgEncoding) []string {
@@ -164,10 +162,10 @@ func (h *handler) encodeSplit(text string, encoding MsgEncoding) []string {
 }
 
 func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
-	smppEndpoint := fmt.Sprintf("%s/msg", h.Server().Config().SMPPServerEndpoint)
+	smppEndpoint := fmt.Sprintf("%s/send-msg", h.Server().Config().SMPPServerEndpoint)
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
-		return nil, fmt.Errorf("wrong urn scheme for the current SMPP channel type")
+		return nil, fmt.Errorf("wrong urn scheme for the current mGage channel type")
 	}
 	req, err := http.NewRequest(http.MethodPost, smppEndpoint, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -176,15 +174,16 @@ func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", h.Server().Config().SMPPServerToken)
 	return utils.MakeHTTPRequest(req)
 }
 
 type MsgEncoding string
 
 const (
-	GSM7       MsgEncoding = "GSM7"
-	UCS2       MsgEncoding = "UCS2"
-	SM_MSG_LEN uint        = 140
+	GSM7     MsgEncoding = "GSM7"
+	UCS2     MsgEncoding = "UCS2"
+	SmMsgLen uint        = 140
 )
 
 type moPayload struct {

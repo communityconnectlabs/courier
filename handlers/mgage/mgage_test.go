@@ -1,4 +1,4 @@
-package smpp
+package mgage
 
 import (
 	"context"
@@ -10,13 +10,7 @@ import (
 )
 
 var testChannels = []courier.Channel{
-	courier.NewMockChannel("58b70770-b76c-40e6-8755-8abb65611839", "SMP", "00338683", "US", map[string]interface{}{
-		"sms_center":          "smscsim.melroselabs.com:2775",
-		"system_id":           "111111",
-		"password":            "111111",
-		"phone_number":        "00111111",
-		"allow_international": false,
-	}),
+	courier.NewMockChannel("58b70770-b76c-40e6-8755-8abb65611839", "MGA", "00338683", "US", map[string]interface{}{}),
 }
 
 var helloMsg = `{
@@ -28,12 +22,12 @@ var helloMsg = `{
 var testCases = []ChannelHandleTestCase{
 	{
 		Label:    "Receive Valid Message",
-		URL:      "/c/smp/58b70770-b76c-40e6-8755-8abb65611839/receive/",
+		URL:      "/c/mga/58b70770-b76c-40e6-8755-8abb65611839/receive/",
 		Data:     helloMsg,
 		Status:   200,
 		Response: "Accepted",
 		Text:     Sp("Hello World"),
-		URN:      Sp("tel:99338683"),
+		URN:      Sp("tel:+18089938683"),
 		Date:     nil,
 	},
 }
@@ -42,8 +36,8 @@ var defaultSendTestCases = []ChannelSendTestCase{
 	{
 		Label:          "Plain Send",
 		Text:           "Hello World",
-		URN:            "tel:99338683",
-		Status:         "S",
+		URN:            "tel:+18089938683",
+		Status:         "W",
 		ResponseBody:   ``,
 		ResponseStatus: 200,
 	},
@@ -97,16 +91,10 @@ func TestSending(t *testing.T) {
 
 	var defaultChannel = courier.NewMockChannel(
 		"58b70770-b76c-40e6-8755-8abb65611839",
-		"SMP",
+		"MGA",
 		"00338683",
 		"US",
-		map[string]interface{}{
-			"sms_center":          "smscsim.melroselabs.com:2775",
-			"system_id":           "111111",
-			"password":            "111111",
-			"phone_number":        "00111111",
-			"allow_international": false,
-		},
+		map[string]interface{}{},
 	)
 
 	RunChannelSendTestCases(t, defaultChannel, newTestSMPPHandler(smppService.URL), defaultSendTestCases, nil)
