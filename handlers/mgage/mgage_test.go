@@ -1,12 +1,12 @@
 package mgage
 
 import (
-	"context"
 	"github.com/nyaruka/courier"
 	. "github.com/nyaruka/courier/handlers"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"github.com/nyaruka/gocommon/urns"
 )
 
 var testChannels = []courier.Channel{
@@ -14,20 +14,21 @@ var testChannels = []courier.Channel{
 }
 
 var helloMsg = `{
-  	"channel": "58b70770-b76c-40e6-8755-8abb65611839",
-  	"contact": "99338683",
-  	"text": "Hello World"
+	"sender": "+18889099091",
+	"receiver": "+18889099090",
+	"encoding": "GSM7",
+	"text": "Hello, world!"
 }`
 
 var testCases = []ChannelHandleTestCase{
 	{
 		Label:    "Receive Valid Message",
-		URL:      "/c/mga/58b70770-b76c-40e6-8755-8abb65611839/receive/",
+		URL:      "/c/mga/58b70770-b76c-40e6-8755-8abb65611839/receive",
 		Data:     helloMsg,
 		Status:   200,
 		Response: "Accepted",
-		Text:     Sp("Hello World"),
-		URN:      Sp("tel:+18089938683"),
+		Text:     Sp("Hello, world!"),
+		URN:      Sp("tel:+18889099091"),
 		Date:     nil,
 	},
 }
@@ -35,8 +36,16 @@ var testCases = []ChannelHandleTestCase{
 var defaultSendTestCases = []ChannelSendTestCase{
 	{
 		Label:          "Plain Send",
-		Text:           "Hello World",
-		URN:            "tel:+18089938683",
+		Text:           "Hello, world!",
+		URN:            "tel:+18889099091",
+		Status:         "W",
+		ResponseBody:   ``,
+		ResponseStatus: 200,
+	},
+	{
+		Label:          "Multiple Segments",
+		Text:           "Tarty giant letter generator uses text symbols ▓▒░▄█▀▌▐─. █▀█ █▄█ ▀█▀ / █▬█ █ ▀█▀ font (no, not ▟▛ █▬█ █ ▜▛ font) uses a different bunch of symbols to fonm letters. By the way, check out my collection of text drawings. ≧^◡^≦ When you'll find a copy of my big text generators around the internet - there's plenty of copies, please know that this is the actual original and we actually designed all of these big letters with my friends, including ASCII Text Art Generator and 𝗧𝗲𝘅𝘁 font copy paste. Proud and angry!",
+		URN:            "tel:+18889099091",
 		Status:         "W",
 		ResponseBody:   ``,
 		ResponseStatus: 200,
@@ -51,38 +60,20 @@ func buildMockSMPPService(testCases []ChannelHandleTestCase) *httptest.Server {
 	return server
 }
 
-// defining decorator struct for handler that will mock SMPP server URL
-type smppTestHandler struct {
-	*handler
-	SMPPServerEndpoint string
-}
-
-func (h *smppTestHandler) Initialize(s courier.Server) error {
-	if h.SMPPServerEndpoint != "" {
-		s.Config().SMPPServerEndpoint = h.SMPPServerEndpoint
-	}
-	return h.handler.Initialize(s)
-}
-func (h *smppTestHandler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStatus, error) {
-	return h.handler.SendMsg(ctx, msg)
-}
-func (h *smppTestHandler) receiveMessage(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
-	return h.handler.receiveMessage(ctx, channel, w, r)
-}
-
-// func that will return decorated handler
-func newTestSMPPHandler(mockedEndpoint string) courier.ChannelHandler {
-	return &smppTestHandler{
-		newHandler().(*handler),
-		mockedEndpoint,
-	}
-}
-
 func TestHandler(t *testing.T) {
 	smppService := buildMockSMPPService(testCases)
 	defer smppService.Close()
 
-	RunChannelTestCases(t, testChannels, newTestSMPPHandler(smppService.URL), testCases)
+	var defaultChannel = courier.NewMockChannel(
+		"58b70770-b76c-40e6-8755-8abb65611839",
+		"MGA",
+		"00338683",
+		"US",
+		map[string]interface{}{},
+	)
+	defaultChannel.SetScheme(urns.ExternalScheme)
+
+	RunChannelTestCases(t, testChannels, newHandler(), testCases)
 }
 
 func TestSending(t *testing.T) {
@@ -96,6 +87,7 @@ func TestSending(t *testing.T) {
 		"US",
 		map[string]interface{}{},
 	)
+	defaultChannel.SetScheme(urns.TelScheme)
 
-	RunChannelSendTestCases(t, defaultChannel, newTestSMPPHandler(smppService.URL), defaultSendTestCases, nil)
+	RunChannelSendTestCases(t, defaultChannel, newHandler(), defaultSendTestCases, nil)
 }
