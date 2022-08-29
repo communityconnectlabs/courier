@@ -32,6 +32,7 @@ func newHandler() courier.ChannelHandler {
 func (h *handler) Initialize(s courier.Server) error {
 	h.SetServer(s)
 	s.AddHandlerRoute(h, http.MethodPost, "receive", h.receiveMessage)
+	s.AddHandlerRoute(h, http.MethodPost, "status", h.receiveStatus)
 	return nil
 }
 
@@ -95,7 +96,7 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 	date := time.Now().UTC()
 
 	// create our URN
-	urn, err := urns.NewURNFromParts(urns.TelScheme, payload.Receiver, "", "")
+	urn, err := urns.NewURNFromParts(urns.TelScheme, payload.Sender, "", "")
 	if err != nil {
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
@@ -112,7 +113,7 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 	if idString != "" {
 		msgID, err := strconv.ParseInt(idString, 10, 64)
 		if err != nil {
-			logrus.WithError(err).WithField("id", idString).Error("error converting twilio callback id to integer")
+			logrus.WithError(err).WithField("id", idString).Error("error converting mGage callback id to integer")
 		} else {
 			status = h.Backend().NewMsgStatusForID(channel, courier.NewMsgID(msgID), "")
 		}
