@@ -15,7 +15,7 @@ var testChannels = []courier.Channel{
 
 var helloMsg = `{
 	"sender": "+18889099091",
-	"receiver": "+18889099090",
+	"receiver": "00338683",
 	"encoding": "GSM7",
 	"text": "Hello, world!"
 }`
@@ -23,7 +23,7 @@ var helloMsg = `{
 var testCases = []ChannelHandleTestCase{
 	{
 		Label:    "Receive Valid Message",
-		URL:      "/c/mga/58b70770-b76c-40e6-8755-8abb65611839/receive",
+		URL:      "/c/mga/receive",
 		Data:     helloMsg,
 		Status:   200,
 		Response: "Accepted",

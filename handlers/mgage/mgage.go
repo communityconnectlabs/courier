@@ -25,7 +25,7 @@ type handler struct {
 }
 
 func newHandler() courier.ChannelHandler {
-	return &handler{handlers.NewBaseHandler("MGA", "mGage")}
+	return &handler{handlers.NewBaseHandlerWithParams(courier.ChannelType("MGA"), "mGage", false)}
 }
 
 // Initialize is called by the engine once everything is loaded
@@ -83,6 +83,23 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 		status.AddLog(log)
 		return status, nil
 	}
+}
+
+// GetChannel returns the channel
+func (h *handler) GetChannel(ctx context.Context, r *http.Request) (courier.Channel, error) {
+	if r.Method == http.MethodGet {
+		return nil, nil
+	}
+
+	payload := &moPayload{}
+	err := handlers.DecodeAndValidateJSON(payload, r)
+	if err != nil {
+		return nil, err
+	}
+
+	channelAddress := payload.Receiver
+
+	return h.Backend().GetChannelByAddress(ctx, courier.ChannelType("MGA"), courier.ChannelAddress(channelAddress))
 }
 
 func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
@@ -168,6 +185,7 @@ func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wrong urn scheme for the current mGage channel type")
 	}
+
 	req, err := http.NewRequest(http.MethodPost, smppEndpoint, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, err
@@ -176,6 +194,7 @@ func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", h.Server().Config().SMPPServerToken)
+
 	return utils.MakeHTTPRequest(req)
 }
 
