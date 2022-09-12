@@ -10,7 +10,6 @@ import (
 	"github.com/nyaruka/courier/utils"
 	"github.com/nyaruka/gocommon/gsm7"
 	"github.com/nyaruka/gocommon/urns"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
 	"time"
@@ -52,8 +51,9 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 		parts := h.encodeSplit(msg.Text(), msgEncoding)
 		partsLength := len(parts)
 		for index, part := range parts {
+			msgID, _ := strconv.Atoi(msg.ID().String())
 			payload := &moPayload{
-				ID:       msg.ID().String(),
+				ID:       msgID,
 				Sender:   msg.Channel().Address(),
 				Receiver: msg.URN().Path(),
 				Text:     part,
@@ -68,8 +68,9 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 		}
 		return status, nil
 	} else {
+		msgID, _ := strconv.Atoi(msg.ID().String())
 		payload := &moPayload{
-			ID:       msg.ID().String(),
+			ID:       msgID,
 			Sender:   msg.Channel().Address(),
 			Receiver: msg.URN().Path(),
 			Text:     msg.Text(),
@@ -124,28 +125,30 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 }
 
 func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
-	// if the message id was passed explicitly, use that
 	var status courier.MsgStatus
-	idString := r.URL.Query().Get("id")
-	if idString != "" {
-		msgID, err := strconv.ParseInt(idString, 10, 64)
-		if err != nil {
-			logrus.WithError(err).WithField("id", idString).Error("error converting mGage callback id to integer")
-		} else {
-			status = h.Backend().NewMsgStatusForID(channel, courier.NewMsgID(msgID), "")
+
+	payload := &eventPayload{}
+	err := handlers.DecodeAndValidateJSON(payload, r)
+	if err != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	}
+
+	fmt.Println(payload)
+
+	switch payload.Status {
+	case courier.MsgSent:
+		if payload.MsgID == 0 {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
-	}
+		status = h.Backend().NewMsgStatusForID(channel, courier.NewMsgID(int64(payload.MsgID)), courier.MsgSent)
+		// todo: add code to update external ID.
 
-	// if we have no status, then build it from the external id
-	if status == nil {
-		status = h.Backend().NewMsgStatusForExternalID(channel, "", "")
+		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
+	case courier.MsgDelivered:
+	case courier.MsgErrored:
+	case courier.MsgFailed:
 	}
-
-	if status.ID() == courier.NilMsgID && status.ExternalID() == "" {
-		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
-	}
-
-	return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
+	return nil, nil
 }
 
 func (h *handler) shouldSplit(text string, encoding MsgEncoding) (shouldSplit bool) {
@@ -207,11 +210,18 @@ const (
 )
 
 type moPayload struct {
-	ID       string `json:"id,omitempty"`
+	ID       int    `json:"id,omitempty"`
 	Sender   string `json:"sender"`
 	Receiver string `json:"receiver"`
 	Encoding string `json:"encoding"`
 	Text     string `json:"text"`
 	Parts    int    `json:"parts"`
 	PartNum  int    `json:"part_num"`
+}
+
+type eventPayload struct {
+	MsgID  int32                  `json:"msg_id"`
+	MsgRef string                 `json:"msg_ref"`
+	Status courier.MsgStatusValue `json:"status"`
+	Data   interface{}            `json:"data"`
 }
