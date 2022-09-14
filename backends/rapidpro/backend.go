@@ -64,6 +64,14 @@ func (b *backend) GetChannelByAddress(ctx context.Context, ct courier.ChannelTyp
 	return getChannelByAddress(timeout, b.db, ct, address)
 }
 
+// GetMsgChannel returns the channel of Msg by MsgID or ExternalID
+func (b *backend) GetMsgChannel(ctx context.Context, ct courier.ChannelType, msgID courier.MsgID, externalID string) (courier.Channel, error) {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	return getChannelByMsg(timeout, b.db, ct, msgID, externalID)
+}
+
 // GetContact returns the contact for the passed in channel and URN
 func (b *backend) GetContact(ctx context.Context, c courier.Channel, urn urns.URN, auth string, name string) (courier.Contact, error) {
 	dbChannel := c.(*DBChannel)

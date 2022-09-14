@@ -24,11 +24,13 @@ import (
 
 // MockBackend is a mocked version of a backend which doesn't require a real database or cache
 type MockBackend struct {
-	channels          map[ChannelUUID]Channel
-	channelsByAddress map[ChannelAddress]Channel
-	contacts          map[urns.URN]Contact
-	queueMsgs         []Msg
-	errorOnQueue      bool
+	channels           map[ChannelUUID]Channel
+	channelsByAddress  map[ChannelAddress]Channel
+	channelsByMsgID    map[MsgID]Channel
+	channelsByExtMsgID map[string]Channel
+	contacts           map[urns.URN]Contact
+	queueMsgs          []Msg
+	errorOnQueue       bool
 
 	mutex           sync.RWMutex
 	outgoingMsgs    []Msg
@@ -277,6 +279,23 @@ func (mb *MockBackend) GetChannelByAddress(ctx context.Context, cType ChannelTyp
 		return nil, ErrChannelNotFound
 	}
 	return channel, nil
+}
+
+// GetChannelByAddress returns the channel with the passed in type and channel address
+func (mb *MockBackend) GetMsgChannel(ctx context.Context, ct ChannelType, msgID MsgID, externalID string) (Channel, error) {
+	if msgID != NilMsgID {
+		channel, found := mb.channelsByMsgID[msgID]
+		if !found {
+			return nil, ErrChannelNotFound
+		}
+		return channel, nil
+	} else {
+		channel, found := mb.channelsByExtMsgID[externalID]
+		if !found {
+			return nil, ErrChannelNotFound
+		}
+		return channel, nil
+	}
 }
 
 // GetContact creates a new contact with the passed in channel and URN

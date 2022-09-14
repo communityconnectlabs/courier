@@ -10,6 +10,8 @@ import (
 	"github.com/nyaruka/courier/utils"
 	"github.com/nyaruka/gocommon/gsm7"
 	"github.com/nyaruka/gocommon/urns"
+	"github.com/nyaruka/phonenumbers"
+	"github.com/pkg/errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -92,15 +94,23 @@ func (h *handler) GetChannel(ctx context.Context, r *http.Request) (courier.Chan
 		return nil, nil
 	}
 
-	payload := &moPayload{}
+	payload := &channelPayload{}
 	err := handlers.DecodeAndValidateJSON(payload, r)
 	if err != nil {
 		return nil, err
 	}
 
-	channelAddress := payload.Receiver
-
-	return h.Backend().GetChannelByAddress(ctx, courier.ChannelType("MGA"), courier.ChannelAddress(channelAddress))
+	if channelAddress := payload.Receiver; channelAddress != "" {
+		parsed, err := phonenumbers.Parse(channelAddress, "")
+		if err != nil {
+			return nil, err
+		}
+		channelAddress := phonenumbers.Format(parsed, phonenumbers.E164)
+		return h.Backend().GetChannelByAddress(ctx, courier.ChannelType("MGA"), courier.ChannelAddress(channelAddress))
+	} else if payload.MsgID != 0 || payload.MsgRef != "" {
+		return h.Backend().GetMsgChannel(ctx, courier.ChannelType("MGA"), courier.MsgID(payload.MsgID), payload.MsgRef)
+	}
+	return nil, errors.New("At least one of [MsgID, MsgRef, Receiver] must be provided.")
 }
 
 func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
@@ -133,20 +143,33 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
 
-	fmt.Println(payload)
-
 	switch payload.Status {
 	case courier.MsgSent:
 		if payload.MsgID == 0 {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
-		status = h.Backend().NewMsgStatusForID(channel, courier.NewMsgID(int64(payload.MsgID)), courier.MsgSent)
+		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgSent)
 		// todo: add code to update external ID.
 
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgDelivered:
+		if payload.MsgRef == "" {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
+		}
+		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgDelivered)
+		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgErrored:
+		if payload.MsgRef == "" {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
+		}
+		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgErrored)
+		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgFailed:
+		if payload.MsgID == 0 {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
+		}
+		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgFailed)
+		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	}
 	return nil, nil
 }
@@ -224,4 +247,10 @@ type eventPayload struct {
 	MsgRef string                 `json:"msg_ref"`
 	Status courier.MsgStatusValue `json:"status"`
 	Data   interface{}            `json:"data"`
+}
+
+type channelPayload struct {
+	MsgID    int32  `json:"msg_id,omitempty"`
+	MsgRef   string `json:"msg_ref,omitempty"`
+	Receiver string `json:"receiver,omitempty"`
 }
