@@ -67,7 +67,7 @@ func TestHandler(t *testing.T) {
 	var defaultChannel = courier.NewMockChannel(
 		"58b70770-b76c-40e6-8755-8abb65611839",
 		"MGA",
-		"00338683",
+		"+12211414154",
 		"US",
 		map[string]interface{}{},
 	)
@@ -83,7 +83,7 @@ func TestSending(t *testing.T) {
 	var defaultChannel = courier.NewMockChannel(
 		"58b70770-b76c-40e6-8755-8abb65611839",
 		"MGA",
-		"00338683",
+		"+12211414154",
 		"US",
 		map[string]interface{}{},
 	)

@@ -101,11 +101,13 @@ func (h *handler) GetChannel(ctx context.Context, r *http.Request) (courier.Chan
 	}
 
 	if channelAddress := payload.Receiver; channelAddress != "" {
-		parsed, err := phonenumbers.Parse(channelAddress, "")
-		if err != nil {
-			return nil, err
+		if isLongCode := len(channelAddress) >= 10; isLongCode {
+			parsed, err := phonenumbers.Parse(channelAddress, "US")
+			if err != nil {
+				return nil, err
+			}
+			channelAddress = phonenumbers.Format(parsed, phonenumbers.E164)
 		}
-		channelAddress := phonenumbers.Format(parsed, phonenumbers.E164)
 		return h.Backend().GetChannelByAddress(ctx, courier.ChannelType("MGA"), courier.ChannelAddress(channelAddress))
 	} else if payload.MsgID != 0 || payload.MsgRef != "" {
 		return h.Backend().GetMsgChannel(ctx, courier.ChannelType("MGA"), courier.MsgID(payload.MsgID), payload.MsgRef)
