@@ -55,13 +55,13 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 		for index, part := range parts {
 			msgID, _ := strconv.Atoi(msg.ID().String())
 			payload := &moPayload{
-				ID:       msgID,
+				ID:       int32(msgID),
 				Sender:   msg.Channel().Address(),
 				Receiver: msg.URN().Path(),
 				Text:     part,
 				Encoding: string(msgEncoding),
-				PartNum:  index + 1,
-				Parts:    partsLength,
+				PartNum:  int32(index + 1),
+				Parts:    int32(partsLength),
 			}
 
 			rr, err := h.sendToSMPP(payload)
@@ -72,7 +72,7 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 	} else {
 		msgID, _ := strconv.Atoi(msg.ID().String())
 		payload := &moPayload{
-			ID:       msgID,
+			ID:       int32(msgID),
 			Sender:   msg.Channel().Address(),
 			Receiver: msg.URN().Path(),
 			Text:     msg.Text(),
@@ -233,13 +233,13 @@ const (
 )
 
 type moPayload struct {
-	ID       int    `json:"id,omitempty"`
+	ID       int32  `json:"id,omitempty"`
 	Sender   string `json:"sender"`
 	Receiver string `json:"receiver"`
 	Encoding string `json:"encoding"`
 	Text     string `json:"text"`
-	Parts    int    `json:"parts"`
-	PartNum  int    `json:"part_num"`
+	Parts    int32  `json:"parts"`
+	PartNum  int32  `json:"part_num"`
 }
 
 type eventPayload struct {
