@@ -151,20 +151,20 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
 		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgSent)
-		// todo: add code to update external ID.
+		status.SetExternalID(payload.MsgRef)
 
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgDelivered:
 		if payload.MsgRef == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
-		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgDelivered)
+		status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgDelivered)
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgErrored:
 		if payload.MsgRef == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
-		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgErrored)
+		status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgErrored)
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgFailed:
 		if payload.MsgID == 0 {
