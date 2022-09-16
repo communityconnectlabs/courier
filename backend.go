@@ -68,6 +68,9 @@ type Backend interface {
 	// NewMsgStatusForExternalID creates a new Status object for the given external id
 	NewMsgStatusForExternalID(Channel, string, MsgStatusValue) MsgStatus
 
+	// GetMsgIDByExternalID
+	GetMsgIDByExternalID(context.Context, string) (MsgIDMap, error)
+
 	// WriteMsgStatus writes the passed in status update to our backend
 	WriteMsgStatus(context.Context, MsgStatus) error
 

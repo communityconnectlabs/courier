@@ -319,12 +319,9 @@ FROM
        channels_channel ch
        JOIN orgs_org org ON ch.org_id = org.id
 	   JOIN msgs_msg msg ON ch.id = msg.channel_id
-       JOIN msgs_messageexternalidmap msg_ids ON msg.id = msg_ids.message_id
+       LEFT JOIN msgs_messageexternalidmap msg_ids ON msg.id = msg_ids.message_id
 WHERE
-       (
-           ($1 <> 0  AND msg.id = $1) OR 
-           ($2 <> '' AND (msg_ids.carrier_id = $2 OR msg_ids.gateway_id = $2))
-       ) AND
+       ((msg.id = $1) OR ($2 <> '' AND (msg_ids.carrier_id = $2 OR msg_ids.gateway_id = $2))) AND
        ch.is_active = true AND
        ch.org_id IS NOT NULL
 LIMIT 1`
@@ -390,12 +387,18 @@ func getCachedChannelByMsg(channelType courier.ChannelType, msgID courier.MsgID,
 
 func RefreshSMPPChannelCache(msgID courier.MsgID, gatewayID string, carrierID string)  {
 	cacheByAddressMutex.Lock()
-	channel, found := channelByMsgIDCache[msgID]
-	if found && gatewayID != "" {
-		channelByMsgGatewayIDCache[gatewayID] = channel
+	if msgID != courier.NilMsgID && gatewayID != "" {
+		channel, found := channelByMsgIDCache[msgID]
+		if found && gatewayID != "" {
+			channelByMsgGatewayIDCache[gatewayID] = channel
+		}
 	}
-	if found && carrierID != "" {
-		channelByMsgCarrierIDCache[carrierID] = channel
+
+	if gatewayID != "" && carrierID != "" {
+		channel, found := channelByMsgGatewayIDCache[gatewayID]
+		if found && carrierID != "" {
+			channelByMsgCarrierIDCache[carrierID] = channel
+		}
 	}
 	cacheByAddressMutex.Unlock()
 }

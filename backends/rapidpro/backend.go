@@ -388,6 +388,13 @@ func (b *backend) NewMsgStatusForExternalID(channel courier.Channel, externalID 
 	return newMsgStatus(channel, courier.NilMsgID, externalID, status)
 }
 
+func (b *backend) GetMsgIDByExternalID(ctx context.Context, externalID string) (courier.MsgIDMap, error) {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	return getMsgByExternalID(timeout, b, externalID)
+}
+
 // WriteMsgStatus writes the passed in MsgStatus to our store
 func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) error {
 	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
@@ -400,24 +407,24 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 		}
 	}
 
-	if status.GatewayID() != "" {
+	if status.ID() != courier.NilMsgID && status.GatewayID() != "" {
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
-			ID: status.ID(),
-			ChannelID: status.ChannelID(),
-			GatewayID: status.GatewayID(),
+			ID_: status.ID(),
+			ChannelID_: status.ChannelID(),
+			GatewayID_: status.GatewayID(),
 		})
 		if err != nil {
-			return errors.Wrap(err, "error updating contact URN")
+			return errors.Wrap(err, "error updating gateway ID")
 		}
 	}
 
-	if status.CarrierID() != "" {
+	if status.GatewayID() != "" && status.CarrierID() != "" {
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
-			ID: status.ID(),
-			GatewayID: status.CarrierID(),
+			GatewayID_: status.GatewayID(),
+			CarrierID_: status.CarrierID(),
 		})
 		if err != nil {
-			return errors.Wrap(err, "error updating contact URN")
+			return errors.Wrap(err, "error updating carrier ID")
 		}
 	}
 

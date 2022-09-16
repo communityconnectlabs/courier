@@ -415,6 +415,10 @@ func (mb *MockBackend) GetContactMessages(channel Channel, contact Contact) ([]M
 	return nil, nil
 }
 
+func (mb *MockBackend) GetMsgIDByExternalID(ctx context.Context, externalID string) (MsgIDMap, error) {
+	return nil, nil
+}
+
 func buildMockBackend(config *Config) Backend {
 	return NewMockBackend()
 }

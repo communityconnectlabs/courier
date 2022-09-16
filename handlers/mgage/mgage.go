@@ -26,7 +26,7 @@ type handler struct {
 }
 
 func newHandler() courier.ChannelHandler {
-	return &handler{handlers.NewBaseHandlerWithParams(courier.ChannelType("MGA"), "mGage", false)}
+	return &handler{handlers.NewBaseHandlerWithParams("MGA", "mGage", false)}
 }
 
 // Initialize is called by the engine once everything is loaded
@@ -37,7 +37,7 @@ func (h *handler) Initialize(s courier.Server) error {
 	return nil
 }
 
-func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStatus, error) {
+func (h *handler) SendMsg(_ context.Context, msg courier.Msg) (courier.MsgStatus, error) {
 	if msg.URN().Scheme() != urns.TelScheme {
 		return nil, fmt.Errorf("wrong urn scheme for the current mGage channel type")
 	}
@@ -108,9 +108,9 @@ func (h *handler) GetChannel(ctx context.Context, r *http.Request) (courier.Chan
 			}
 			channelAddress = phonenumbers.Format(parsed, phonenumbers.E164)
 		}
-		return h.Backend().GetChannelByAddress(ctx, courier.ChannelType("MGA"), courier.ChannelAddress(channelAddress))
+		return h.Backend().GetChannelByAddress(ctx, "MGA", courier.ChannelAddress(channelAddress))
 	} else if payload.MsgID != 0 || payload.MsgRef != "" {
-		return h.Backend().GetMsgChannel(ctx, courier.ChannelType("MGA"), courier.MsgID(payload.MsgID), payload.MsgRef)
+		return h.Backend().GetMsgChannel(ctx, "MGA", courier.MsgID(payload.MsgID), payload.MsgRef)
 	}
 	return nil, errors.New("At least one of [MsgID, MsgRef, Receiver] must be provided.")
 }
@@ -161,6 +161,7 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
 		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgSent)
+		status.SetExternalID(payload.MsgRef)
 		status.SetGatewayID(payload.MsgRef)
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgEnroute:
@@ -177,19 +178,28 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 		if !ok {
 			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.New("no carrier id to update status"))
 		}
+		status.SetGatewayID(payload.MsgRef)
 		status.SetCarrierID(carrierID.(string))
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgDelivered:
 		if payload.MsgRef == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
-		status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgDelivered)
+		msgIDMap, err := h.Backend().GetMsgIDByExternalID(ctx, payload.MsgRef)
+		if err != nil {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.Wrap(err, "failed to get message data"))
+		}
+		status = h.Backend().NewMsgStatusForID(channel, msgIDMap.ID(), courier.MsgDelivered)
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgErrored:
 		if payload.MsgRef == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
-		status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgErrored)
+		msgIDMap, err := h.Backend().GetMsgIDByExternalID(ctx, payload.MsgRef)
+		if err != nil {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.Wrap(err, "failed to get message data"))
+		}
+		status = h.Backend().NewMsgStatusForID(channel, msgIDMap.ID(), courier.MsgErrored)
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgFailed:
 		if payload.MsgID == 0 {
