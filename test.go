@@ -665,12 +665,15 @@ type mockMsgStatus struct {
 	oldURN     urns.URN
 	newURN     urns.URN
 	externalID string
+	gatewayID  string
+	carrierID  string
 	status     MsgStatusValue
 	createdOn  time.Time
 
 	logs []*ChannelLog
 }
 
+func (m *mockMsgStatus) ChannelID() ChannelID     { return NilChannelID }
 func (m *mockMsgStatus) ChannelUUID() ChannelUUID { return m.channel.UUID() }
 func (m *mockMsgStatus) ID() MsgID                { return m.id }
 func (m *mockMsgStatus) EventID() int64           { return int64(m.id) }
@@ -692,6 +695,11 @@ func (m *mockMsgStatus) HasUpdatedURN() bool {
 
 func (m *mockMsgStatus) ExternalID() string      { return m.externalID }
 func (m *mockMsgStatus) SetExternalID(id string) { m.externalID = id }
+
+func (s *mockMsgStatus) GatewayID() string      { return s.gatewayID }
+func (s *mockMsgStatus) SetGatewayID(id string) { s.gatewayID = id }
+func (s *mockMsgStatus) CarrierID() string      { return s.carrierID }
+func (s *mockMsgStatus) SetCarrierID(id string) { s.carrierID = id }
 
 func (m *mockMsgStatus) Status() MsgStatusValue          { return m.status }
 func (m *mockMsgStatus) SetStatus(status MsgStatusValue) { m.status = status }

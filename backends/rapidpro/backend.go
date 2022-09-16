@@ -399,6 +399,28 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 			return errors.Wrap(err, "error updating contact URN")
 		}
 	}
+
+	if status.GatewayID() != "" {
+		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
+			ID: status.ID(),
+			ChannelID: status.ChannelID(),
+			GatewayID: status.GatewayID(),
+		})
+		if err != nil {
+			return errors.Wrap(err, "error updating contact URN")
+		}
+	}
+
+	if status.CarrierID() != "" {
+		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
+			ID: status.ID(),
+			GatewayID: status.CarrierID(),
+		})
+		if err != nil {
+			return errors.Wrap(err, "error updating contact URN")
+		}
+	}
+
 	// if we have an ID, we can have our batch commit for us
 	if status.ID() != courier.NilMsgID {
 		b.statusCommitter.Queue(status.(*DBMsgStatus))

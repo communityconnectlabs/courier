@@ -317,12 +317,17 @@ SELECT
        org.is_anon as org_is_anon
 FROM
        channels_channel ch
-       JOIN orgs_org org on ch.org_id = org.id
-	   JOIN msgs_msg mm on ch.id = mm.channel_id
+       JOIN orgs_org org ON ch.org_id = org.id
+	   JOIN msgs_msg msg ON ch.id = msg.channel_id
+       JOIN msgs_messageexternalidmap msg_ids ON msg.id = msg_ids.message_id
 WHERE
-       (mm.id = $1 OR ($2 <> '' AND mm.external_id ~ $2)) AND
+       (
+           ($1 <> 0  AND msg.id = $1) OR 
+           ($2 <> '' AND (msg_ids.carrier_id = $2 OR msg_ids.gateway_id = $2))
+       ) AND
        ch.is_active = true AND
-       ch.org_id IS NOT NULL`
+       ch.org_id IS NOT NULL
+LIMIT 1`
 
 // loadChannelByAddressFromDB get the channel with the passed in channel type and address from the DB, returning it
 func loadChannelByMsgsFromDB(ctx context.Context, db *sqlx.DB, channelType courier.ChannelType, msgID courier.MsgID, externalID string) (*DBChannel, error) {
@@ -358,7 +363,10 @@ func getCachedChannelByMsg(channelType courier.ChannelType, msgID courier.MsgID,
 	if msgID != courier.NilMsgID {
 		channel, found = channelByMsgIDCache[msgID]
 	} else if externalID != "" {
-		channel, found = channelByMsgExternalIDCache[externalID]
+		channel, found = channelByMsgGatewayIDCache[externalID]
+		if !found {
+			channel, found = channelByMsgCarrierIDCache[externalID]
+		}
 	}
 	cacheByMsgMutex.RUnlock()
 
@@ -380,20 +388,38 @@ func getCachedChannelByMsg(channelType courier.ChannelType, msgID courier.MsgID,
 	return nil, courier.ErrChannelNotFound
 }
 
+func RefreshSMPPChannelCache(msgID courier.MsgID, gatewayID string, carrierID string)  {
+	cacheByAddressMutex.Lock()
+	channel, found := channelByMsgIDCache[msgID]
+	if found && gatewayID != "" {
+		channelByMsgGatewayIDCache[gatewayID] = channel
+	}
+	if found && carrierID != "" {
+		channelByMsgCarrierIDCache[carrierID] = channel
+	}
+	cacheByAddressMutex.Unlock()
+}
+
 func clearLocalChannelByMsg(msgID courier.MsgID, externalID string) {
 	cacheByAddressMutex.Lock()
 	if msgID != courier.NilMsgID {
 		delete(channelByMsgIDCache, msgID)
 	}
 	if externalID != "" {
-		delete(channelByMsgExternalIDCache, externalID)
+		if _, ok := channelByMsgGatewayIDCache[externalID]; ok {
+			delete(channelByMsgGatewayIDCache, externalID)
+		}
+		if _, ok := channelByMsgCarrierIDCache[externalID]; ok {
+			delete(channelByMsgCarrierIDCache, externalID)
+		}
 	}
 	cacheByAddressMutex.Unlock()
 }
 
 var cacheByMsgMutex sync.RWMutex
 var channelByMsgIDCache = make(map[courier.MsgID]*DBChannel)
-var channelByMsgExternalIDCache = make(map[string]*DBChannel)
+var channelByMsgGatewayIDCache = make(map[string]*DBChannel)
+var channelByMsgCarrierIDCache = make(map[string]*DBChannel)
 
 //-----------------------------------------------------------------------------
 // Channel Implementation

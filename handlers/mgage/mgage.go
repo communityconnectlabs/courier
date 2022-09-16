@@ -125,8 +125,18 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 	// create our date from the timestamp
 	date := time.Now().UTC()
 
+	// format contact phone number
+	senderPhoneNumber := payload.Sender
+	if isLongCode := len(senderPhoneNumber) >= 10; isLongCode {
+		parsed, err := phonenumbers.Parse(senderPhoneNumber, "US")
+		if err != nil {
+			return nil, err
+		}
+		senderPhoneNumber = phonenumbers.Format(parsed, phonenumbers.E164)
+	}
+
 	// create our URN
-	urn, err := urns.NewURNFromParts(urns.TelScheme, payload.Sender, "", "")
+	urn, err := urns.NewURNFromParts(urns.TelScheme, senderPhoneNumber, "", "")
 	if err != nil {
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
@@ -151,8 +161,23 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
 		status = h.Backend().NewMsgStatusForID(channel, courier.MsgID(payload.MsgID), courier.MsgSent)
-		status.SetExternalID(payload.MsgRef)
+		status.SetGatewayID(payload.MsgRef)
+		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
+	case courier.MsgEnroute:
+		if payload.MsgRef == "" {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
+		}
+		status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgEnroute)
+		dm, ok := payload.Data.(map[string]interface{})
+		if !ok {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.New("no data to update status"))
+		}
 
+		carrierID, ok := dm["CarrierID"]
+		if !ok {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.New("no carrier id to update status"))
+		}
+		status.SetCarrierID(carrierID.(string))
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgDelivered:
 		if payload.MsgRef == "" {

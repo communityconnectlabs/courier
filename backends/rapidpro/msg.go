@@ -721,3 +721,45 @@ func (m *DBMsg) WithURNAuth(auth string) courier.Msg {
 	m.URNAuth_ = auth
 	return m
 }
+
+//-----------------------------------------------------------------------------
+// Our implementation of MessageExternalIDMap interface
+//-----------------------------------------------------------------------------
+
+type DBMsgIDMap struct {
+	ID        courier.MsgID     `json:"id"         db:"id"`
+	GatewayID string            `json:"gateway_id" db:"gateway_id"`
+	CarrierID string            `json:"carrier_id" db:"carrier_id"`
+	ChannelID courier.ChannelID `json:"channel_id" db:"channel_id"`
+}
+
+
+const insertMsgExternalIDMapSQL = `
+INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id) VALUES(:message_id, :channel_id, :gateway_id)
+`
+
+const updateMsgExternalIDMapSQL = `
+UPDATE msgs_messageexternalidmap SET carrier_id = :carrier_id WHERE message_id = :message_id
+`
+
+func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) error {
+	// insert new gateway id for existing message
+	if m.ID != courier.NilMsgID && m.ChannelID != courier.NilChannelID && m.GatewayID != "" {
+		_, err := b.db.NamedExecContext(ctx, insertMsgExternalIDMapSQL, m)
+		if err != nil {
+			return err
+		}
+		RefreshSMPPChannelCache(m.ID, m.GatewayID, "")
+	}
+
+	// insert new carrier id for existing message
+	if m.ID != courier.NilMsgID && m.CarrierID != "" {
+		_, err := b.db.NamedExecContext(ctx, updateMsgExternalIDMapSQL, m)
+		if err != nil {
+			return err
+		}
+		RefreshSMPPChannelCache(m.ID, "", m.CarrierID)
+	}
+
+	return nil
+}
