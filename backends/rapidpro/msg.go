@@ -739,11 +739,11 @@ func (m *DBMsgIDMap) CarrierID() string            { return m.GatewayID_ }
 func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
 
 const insertMsgExternalIDMapSQL = `
-INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id) VALUES(:message_id, :channel_id, :gateway_id)
+INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, created_on, modified_on) VALUES(:message_id, :channel_id, :gateway_id, now(), now())
 `
 
 const updateMsgExternalIDMapSQL = `
-UPDATE msgs_messageexternalidmap SET carrier_id = :carrier_id WHERE gateway_id = :gateway_id
+UPDATE msgs_messageexternalidmap SET carrier_id = :carrier_id, modified_on = now() WHERE gateway_id = :gateway_id
 `
 
 func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) error {
@@ -769,7 +769,7 @@ func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) e
 }
 
 const selectMsgByExternalID = `
-SELECT message_id, gateway_id, carrier_id, channel_id FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 LIMIT 1;
+SELECT message_id, gateway_id, carrier_id, channel_id FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 ORDER BY modified_on DESC LIMIT 1;
 `
 
 func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (courier.MsgIDMap, error) {
