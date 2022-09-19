@@ -769,7 +769,7 @@ func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) e
 }
 
 const selectMsgByExternalID = `
-SELECT * FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 LIMIT 1;
+SELECT message_id, gateway_id, carrier_id, channel_id FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 LIMIT 1;
 `
 
 func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (courier.MsgIDMap, error) {
