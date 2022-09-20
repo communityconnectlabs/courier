@@ -3,10 +3,12 @@ package mgage
 import (
 	"github.com/nyaruka/courier"
 	. "github.com/nyaruka/courier/handlers"
+	"github.com/nyaruka/gocommon/urns"
+	"github.com/sirupsen/logrus"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"github.com/nyaruka/gocommon/urns"
 )
 
 var testChannels = []courier.Channel{
@@ -76,6 +78,22 @@ func TestHandler(t *testing.T) {
 	RunChannelTestCases(t, testChannels, newHandler(), testCases)
 }
 
+func setupBackendAndServer(smppTestServerUrl string) func() (*courier.MockBackend, courier.Server) {
+	return func() (mb *courier.MockBackend, s courier.Server) {
+		mb = courier.NewMockBackend()
+
+		logger := logrus.New()
+		logger.Out = ioutil.Discard
+		logrus.SetOutput(ioutil.Discard)
+
+		config := courier.NewConfig()
+		config.SMPPServerEndpoint = smppTestServerUrl
+
+		s = courier.NewServerWithLogger(config, mb, logger)
+		return
+	}
+}
+
 func TestSending(t *testing.T) {
 	smppService := buildMockSMPPService(testCases)
 	defer smppService.Close()
@@ -89,5 +107,5 @@ func TestSending(t *testing.T) {
 	)
 	defaultChannel.SetScheme(urns.TelScheme)
 
-	RunChannelSendTestCases(t, defaultChannel, newHandler(), defaultSendTestCases, nil)
+	RunChannelSendTestCases(t, defaultChannel, newHandler(), defaultSendTestCases, setupBackendAndServer(smppService.URL))
 }
