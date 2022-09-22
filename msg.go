@@ -129,6 +129,6 @@ type Msg interface {
 type MsgIDMap interface {
 	ID() MsgID
 	GatewayID() string
-    CarrierID() string
-    ChannelID() ChannelID
+	CarrierID() string
+	ChannelID() ChannelID
 }
