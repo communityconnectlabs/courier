@@ -720,3 +720,62 @@ func (m *DBMsg) WithURNAuth(auth string) courier.Msg {
 	m.URNAuth_ = auth
 	return m
 }
+
+//-----------------------------------------------------------------------------
+// Our implementation of MessageExternalIDMap interface
+//-----------------------------------------------------------------------------
+
+type DBMsgIDMap struct {
+	ID_        courier.MsgID     `json:"message_id" db:"message_id"`
+	GatewayID_ string            `json:"gateway_id" db:"gateway_id"`
+	CarrierID_ string            `json:"carrier_id" db:"carrier_id"`
+	ChannelID_ courier.ChannelID `json:"channel_id" db:"channel_id"`
+}
+
+func (m *DBMsgIDMap) ID() courier.MsgID            { return m.ID_ }
+func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_ }
+func (m *DBMsgIDMap) CarrierID() string            { return m.GatewayID_ }
+func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
+
+const insertMsgExternalIDMapSQL = `
+INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, created_on, modified_on) VALUES(:message_id, :channel_id, :gateway_id, now(), now())
+`
+
+const updateMsgExternalIDMapSQL = `
+UPDATE msgs_messageexternalidmap SET carrier_id = :carrier_id, modified_on = now() WHERE gateway_id = :gateway_id
+`
+
+func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) error {
+	// insert new gateway id for existing message
+	if m.ID() != courier.NilMsgID && m.ChannelID() != courier.NilChannelID && m.GatewayID() != "" {
+		_, err := b.db.NamedExecContext(ctx, insertMsgExternalIDMapSQL, m)
+		if err != nil {
+			return err
+		}
+		RefreshSMPPChannelCache(m.ID(), m.GatewayID(), "")
+	}
+
+	// insert new carrier id for existing message
+	if m.GatewayID() != "" && m.CarrierID() != "" {
+		_, err := b.db.NamedExecContext(ctx, updateMsgExternalIDMapSQL, m)
+		if err != nil {
+			return err
+		}
+		RefreshSMPPChannelCache(courier.NilMsgID, m.GatewayID(), m.CarrierID())
+	}
+
+	return nil
+}
+
+const selectMsgByExternalID = `
+SELECT message_id, gateway_id, carrier_id, channel_id FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 ORDER BY modified_on DESC LIMIT 1;
+`
+
+func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (courier.MsgIDMap, error) {
+	idMap := &DBMsgIDMap{}
+	err := b.db.GetContext(ctx, idMap, selectMsgByExternalID, externalID)
+	if err != nil {
+		return nil, err
+	}
+	return idMap, nil
+}

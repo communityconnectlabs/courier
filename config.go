@@ -31,6 +31,8 @@ type Config struct {
 	LogLevel                  string `help:"the logging level courier should use"`
 	Version                   string `help:"the version that will be used in request and response headers"`
 	WebChatServerSecret       string `help:"key for encoding the websocket tokens"`
+	SMPPServerEndpoint        string `help:"the URL of the server that handles SMPP connections"`
+	SMPPServerToken           string `help:"the token of the server that handles SMPP connections"`
 
 	// IncludeChannels is the list of channels to enable, empty means include all
 	IncludeChannels []string
@@ -64,6 +66,8 @@ func NewConfig() *Config {
 		LogLevel:                  "error",
 		Version:                   "Dev",
 		WebChatServerSecret:       "",
+		SMPPServerEndpoint:        "",
+		SMPPServerToken:           "",
 	}
 }
 

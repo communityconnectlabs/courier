@@ -64,6 +64,14 @@ func (b *backend) GetChannelByAddress(ctx context.Context, ct courier.ChannelTyp
 	return getChannelByAddress(timeout, b.db, ct, address)
 }
 
+// GetMsgChannel returns the channel of Msg by MsgID or ExternalID
+func (b *backend) GetMsgChannel(ctx context.Context, ct courier.ChannelType, msgID courier.MsgID, externalID string) (courier.Channel, error) {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	return getChannelByMsg(timeout, b.db, ct, msgID, externalID)
+}
+
 // GetContact returns the contact for the passed in channel and URN
 func (b *backend) GetContact(ctx context.Context, c courier.Channel, urn urns.URN, auth string, name string) (courier.Contact, error) {
 	dbChannel := c.(*DBChannel)
@@ -380,6 +388,13 @@ func (b *backend) NewMsgStatusForExternalID(channel courier.Channel, externalID 
 	return newMsgStatus(channel, courier.NilMsgID, externalID, status)
 }
 
+func (b *backend) GetMsgIDByExternalID(ctx context.Context, externalID string) (courier.MsgIDMap, error) {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	return getMsgByExternalID(timeout, b, externalID)
+}
+
 // WriteMsgStatus writes the passed in MsgStatus to our store
 func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) error {
 	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
@@ -391,6 +406,28 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 			return errors.Wrap(err, "error updating contact URN")
 		}
 	}
+
+	if status.ID() != courier.NilMsgID && status.GatewayID() != "" {
+		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
+			ID_: status.ID(),
+			ChannelID_: status.ChannelID(),
+			GatewayID_: status.GatewayID(),
+		})
+		if err != nil {
+			return errors.Wrap(err, "error updating gateway ID")
+		}
+	}
+
+	if status.GatewayID() != "" && status.CarrierID() != "" {
+		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
+			GatewayID_: status.GatewayID(),
+			CarrierID_: status.CarrierID(),
+		})
+		if err != nil {
+			return errors.Wrap(err, "error updating carrier ID")
+		}
+	}
+
 	// if we have an ID, we can have our batch commit for us
 	if status.ID() != courier.NilMsgID {
 		b.statusCommitter.Queue(status.(*DBMsgStatus))
