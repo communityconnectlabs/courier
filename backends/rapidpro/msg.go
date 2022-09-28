@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -738,7 +739,7 @@ func (m *DBMsgIDMap) CarrierID() string            { return m.GatewayID_ }
 func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
 
 const insertMsgExternalIDMapSQL = `
-INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, created_on, modified_on) VALUES(:message_id, :channel_id, :gateway_id, now(), now())
+INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, carrier_id, created_on, modified_on) VALUES(:message_id, :channel_id, :gateway_id, NULL, now(), now())
 `
 
 const updateMsgExternalIDMapSQL = `
@@ -750,7 +751,7 @@ func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) e
 	if m.ID() != courier.NilMsgID && m.ChannelID() != courier.NilChannelID && m.GatewayID() != "" {
 		_, err := b.db.NamedExecContext(ctx, insertMsgExternalIDMapSQL, m)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to insert gateway ID")
 		}
 		RefreshSMPPChannelCache(m.ID(), m.GatewayID(), "")
 	}
@@ -759,7 +760,7 @@ func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) e
 	if m.GatewayID() != "" && m.CarrierID() != "" {
 		_, err := b.db.NamedExecContext(ctx, updateMsgExternalIDMapSQL, m)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to update carrier ID")
 		}
 		RefreshSMPPChannelCache(courier.NilMsgID, m.GatewayID(), m.CarrierID())
 	}
