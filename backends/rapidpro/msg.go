@@ -735,7 +735,7 @@ type DBMsgIDMap struct {
 
 func (m *DBMsgIDMap) ID() courier.MsgID            { return m.ID_ }
 func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_ }
-func (m *DBMsgIDMap) CarrierID() string            { return m.GatewayID_ }
+func (m *DBMsgIDMap) CarrierID() string            { return m.CarrierID_ }
 func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
 
 const insertMsgExternalIDMapSQL = `
