@@ -115,8 +115,15 @@ func (h *handler) GetChannel(ctx context.Context, r *http.Request) (courier.Chan
 			channelAddress = phonenumbers.Format(parsed, phonenumbers.E164)
 		}
 		return h.Backend().GetChannelByAddress(ctx, "MGA", courier.ChannelAddress(channelAddress))
-	} else if payload.MsgID != 0 || payload.MsgRef != "" {
-		return h.Backend().GetMsgChannel(ctx, "MGA", courier.MsgID(payload.MsgID), payload.MsgRef)
+	} else if payload.MsgID != 0 {
+		return h.Backend().GetMsgChannel(ctx, "MGA", courier.MsgID(payload.MsgID), "")
+	} else if payload.MsgRef != "" {
+		channel, err := h.Backend().GetMsgChannel(ctx, "MGA", courier.MsgID(0), payload.MsgRef)
+		// allow empty channel in case the Gateway ID wasn't received yet
+		if errors.Is(err, courier.ErrChannelNotFound) {
+			return &EmptyMGAChannel{}, nil
+		}
+		return channel, nil
 	}
 	return nil, errors.New("At least one of [MsgID, MsgRef, Receiver] must be provided.")
 }

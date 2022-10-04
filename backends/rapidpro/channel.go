@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -285,7 +286,7 @@ func getChannelByMsg(ctx context.Context, db *sqlx.DB, channelType courier.Chann
 	// if it wasn't found in the DB, clear our cache and return that it wasn't found
 	if dbErr == courier.ErrChannelNotFound {
 		clearLocalChannelByMsg(msgID, externalID)
-		return cachedChannel, fmt.Errorf("unable to find channel with type: %s and MsgID: %s and MsgExternalID: %s", channelType.String(), msgID.String(), externalID)
+		return cachedChannel, errors.Wrap(dbErr, fmt.Sprintf("unable to find channel with type: %s and MsgID: %s and MsgExternalID: %s", channelType.String(), msgID.String(), externalID))
 	}
 
 	// if we had some other db error, return it if our cached channel was only just expired

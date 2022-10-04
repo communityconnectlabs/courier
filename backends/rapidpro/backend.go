@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/nyaruka/courier/handlers/mgage"
 	"net/url"
 	"path"
 	"strings"
@@ -409,7 +410,7 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 
 	if status.ID() != courier.NilMsgID && status.GatewayID() != "" {
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
-			ID_: status.ID(),
+			ID_:        status.ID(),
 			ChannelID_: status.ChannelID(),
 			GatewayID_: status.GatewayID(),
 		})
@@ -528,6 +529,11 @@ func (b *backend) WriteChannelLogs(ctx context.Context, logs []*courier.ChannelL
 	defer cancel()
 
 	for _, l := range logs {
+		// skip log if channel is undefined MGA channel
+		if _, isEmptyMGA := l.Channel.(*mgage.EmptyMGAChannel); isEmptyMGA {
+			continue
+		}
+
 		err := writeChannelLog(timeout, b, l)
 		if err != nil {
 			logrus.WithError(err).Error("error writing channel log")
