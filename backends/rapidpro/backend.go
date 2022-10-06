@@ -419,14 +419,20 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 		}
 	}
 
-	if status.GatewayID() != "" && status.CarrierID() != "" {
+	if status.CarrierID() != "" {
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
 			GatewayID_: status.GatewayID(),
 			CarrierID_: status.CarrierID(),
+			Logs:       logsToJSONString(status.Logs()),
 		})
 		if err != nil {
 			return errors.Wrap(err, "error updating carrier ID")
 		}
+	}
+
+	// skip saving DBMsgStatus if channel is EmptyMGAChannel
+	if status.ID() == courier.NilMsgID && status.ChannelUUID() == courier.NilChannelUUID {
+		return nil
 	}
 
 	// if we have an ID, we can have our batch commit for us
@@ -449,6 +455,14 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 	}
 
 	return nil
+}
+
+func logsToJSONString(logs []*courier.ChannelLog) json.RawMessage {
+	data, err := json.Marshal(logs)
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 // updateContactURN updates contact URN according to the old/new URNs from status

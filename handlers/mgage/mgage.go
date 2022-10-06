@@ -3,6 +3,7 @@ package mgage
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/nyaruka/courier"
@@ -13,6 +14,7 @@ import (
 	"github.com/nyaruka/phonenumbers"
 	"github.com/pkg/errors"
 	"net/http"
+	"net/http/httputil"
 	"strconv"
 	"time"
 )
@@ -193,27 +195,46 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 		}
 		status.SetGatewayID(payload.MsgRef)
 		status.SetCarrierID(carrierID.(string))
+
+		// store channel logs if exact channel can't be defined at the moment
+		if _, isEmptyMGACHannel := channel.(*EmptyMGAChannel); isEmptyMGACHannel {
+			processStatusLogs(status, channel, r)
+		}
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	case courier.MsgDelivered:
 		if payload.MsgRef == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
 		msgIDMap, err := h.Backend().GetMsgIDByExternalID(ctx, payload.MsgRef)
-		if err != nil {
-			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.Wrap(err, "failed to get message data"))
+		if err == sql.ErrNoRows || (msgIDMap != nil && msgIDMap.ID() == courier.NilMsgID)  {
+			// save channel logs if exact channel can't be defined at the moment
+			status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgDelivered)
+			status.SetCarrierID(payload.MsgRef)
+			processStatusLogs(status, channel, r)
+			return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
+		} else if err == nil {
+			// save normal channel log
+			status = h.Backend().NewMsgStatusForID(channel, msgIDMap.ID(), courier.MsgDelivered)
+			return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 		}
-		status = h.Backend().NewMsgStatusForID(channel, msgIDMap.ID(), courier.MsgDelivered)
-		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.Wrap(err, "failed to get message data"))
 	case courier.MsgErrored:
 		if payload.MsgRef == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
 		msgIDMap, err := h.Backend().GetMsgIDByExternalID(ctx, payload.MsgRef)
-		if err != nil {
-			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.Wrap(err, "failed to get message data"))
+		if err == sql.ErrNoRows || (msgIDMap != nil && msgIDMap.ID() == courier.NilMsgID) {
+			// save channel logs if exact channel can't be defined at the moment
+			status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgErrored)
+			status.SetGatewayID(payload.MsgRef)
+			processStatusLogs(status, channel, r)
+			return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
+		} else if err == nil {
+			// save normal channel log
+			status = h.Backend().NewMsgStatusForID(channel, msgIDMap.ID(), courier.MsgErrored)
+			return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 		}
-		status = h.Backend().NewMsgStatusForID(channel, msgIDMap.ID(), courier.MsgErrored)
-		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errors.Wrap(err, "failed to get message data"))
 	case courier.MsgFailed:
 		if payload.MsgID == 0 {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
@@ -222,6 +243,29 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 	}
 	return nil, nil
+}
+
+func processStatusLogs(status courier.MsgStatus, channel courier.Channel, r *http.Request) {
+	if _, isEmptyMGA := channel.(*EmptyMGAChannel); isEmptyMGA {
+		var duration time.Duration = -1
+
+		// Trim out cookie header, should never be part of authentication and can leak auth to channel logs
+		r.Header.Del("Cookie")
+		request, err := httputil.DumpRequest(r, true)
+		if err != nil {
+			// skip creation of log if any error
+			return
+		}
+		url := fmt.Sprintf("https://%s%s", r.Host, r.URL.RequestURI())
+
+		// Prepare response data
+		response := map[string]interface{}{
+			"message": "Status Update Accepted",
+			"data":    []interface{}{courier.NewStatusData(status)},
+		}
+		responseJson, _ := json.Marshal(response)
+		status.AddLog(courier.NewChannelLog("Status Updated", channel, courier.NilMsgID, r.Method, url, http.StatusOK, string(request), string(responseJson), duration, err))
+	}
 }
 
 func (h *handler) shouldSplit(text string, encoding MsgEncoding) (shouldSplit bool) {

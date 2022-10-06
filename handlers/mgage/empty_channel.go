@@ -14,8 +14,8 @@ func (e EmptyMGAChannel) ChannelAddress() courier.ChannelAddress { return "" }
 func (e EmptyMGAChannel) Roles() []courier.ChannelRole           { return nil }
 
 func (e EmptyMGAChannel) IsScheme(_ string) bool                                           { return false }
-func (e EmptyMGAChannel) CallbackDomain(_ string) string                      { return "" }
-func (e EmptyMGAChannel) ConfigForKey(_ string, _ interface{}) interface{}    { return nil }
+func (e EmptyMGAChannel) CallbackDomain(_ string) string                                   { return "" }
+func (e EmptyMGAChannel) ConfigForKey(_ string, _ interface{}) interface{}                 { return nil }
 func (e EmptyMGAChannel) StringConfigForKey(key string, defaultValue string) string        { return "" }
 func (e EmptyMGAChannel) BoolConfigForKey(key string, defaultValue bool) bool              { return false }
 func (e EmptyMGAChannel) IntConfigForKey(key string, defaultValue int) int                 { return 0 }
