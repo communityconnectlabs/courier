@@ -423,10 +423,17 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
 			GatewayID_: status.GatewayID(),
 			CarrierID_: status.CarrierID(),
-			Logs:       logsToJSONString(status.Logs()),
+			Logs_:      logsToJSONString(status.Logs()),
 		})
 		if err != nil {
 			return errors.Wrap(err, "error updating carrier ID")
+		}
+	}
+
+	if status.ID() != courier.NilMsgID && status.ExternalID() != "" {
+		err := writeSavedChannelLogs(ctx, b, status.ChannelID(), status.ID(), status.ExternalID())
+		if err != nil {
+			return errors.Wrap(err, "error moving channel logs for ExternalIDMap to ChannelLog table")
 		}
 	}
 

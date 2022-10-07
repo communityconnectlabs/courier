@@ -103,8 +103,8 @@ func (l *ChannelLog) String() string {
 // cases we may log without a msg id)
 type ChannelLog struct {
 	Description string        `json:"description"`
-	Channel     Channel       `json:"channel"`
-	MsgID       MsgID         `json:"msg_id"`
+	Channel     Channel       `json:"-"`
+	MsgID       MsgID         `json:"-"`
 	Method      string        `json:"method"`
 	URL         string        `json:"url"`
 	StatusCode  int           `json:"status_code"`

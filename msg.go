@@ -131,4 +131,5 @@ type MsgIDMap interface {
 	GatewayID() string
 	CarrierID() string
 	ChannelID() ChannelID
+	Logs()      json.RawMessage
 }

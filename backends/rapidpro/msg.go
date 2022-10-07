@@ -733,13 +733,14 @@ type DBMsgIDMap struct {
 	GatewayID_ string            `json:"gateway_id" db:"gateway_id"`
 	CarrierID_ string            `json:"carrier_id" db:"carrier_id"`
 	ChannelID_ courier.ChannelID `json:"channel_id" db:"channel_id"`
-	Logs       json.RawMessage   `json:"logs"       db:"logs"`
+	Logs_      json.RawMessage   `json:"logs"       db:"logs"`
 }
 
 func (m *DBMsgIDMap) ID() courier.MsgID            { return m.ID_ }
 func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_ }
 func (m *DBMsgIDMap) CarrierID() string            { return m.CarrierID_ }
 func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
+func (m *DBMsgIDMap) Logs() json.RawMessage        { return m.Logs_ }
 
 const setIdsOnSentSQL = `
 INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, carrier_id, created_on, modified_on) 
@@ -834,7 +835,6 @@ func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) e
 		RefreshSMPPChannelCache(courier.NilMsgID, m.GatewayID(), m.CarrierID())
 	}
 
-
 	if m.GatewayID() == "" && m.CarrierID() != "" {
 		_, err := b.db.NamedExecContext(ctx, setIdsOnDeliveredSQL, m)
 		if err != nil {
@@ -845,7 +845,7 @@ func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) e
 }
 
 const selectMsgByExternalID = `
-SELECT message_id, gateway_id, carrier_id, channel_id FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 ORDER BY modified_on DESC LIMIT 1;
+SELECT message_id, gateway_id, carrier_id, channel_id, request_logs as logs FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 ORDER BY modified_on DESC LIMIT 1;
 `
 
 func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (courier.MsgIDMap, error) {
@@ -855,4 +855,38 @@ func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (cou
 		return nil, err
 	}
 	return idMap, nil
+}
+
+func writeSavedChannelLogs(ctx context.Context, b *backend, channelID courier.ChannelID, msgID courier.MsgID, externalID string) error {
+	msgIDMap, err := getMsgByExternalID(ctx, b, externalID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+
+	var logs []*courier.ChannelLog
+	err = json.Unmarshal(msgIDMap.Logs(), &logs)
+	if err != nil {
+		return err
+	}
+
+	for _, channelLog := range logs {
+		b.logCommitter.Queue(&ChannelLog{
+			ChannelID:      channelID,
+			MsgID:          msgID,
+			Description:    channelLog.Description,
+			IsError:        channelLog.Error != "",
+			Method:         channelLog.Method,
+			URL:            channelLog.URL,
+			Request:        channelLog.Request,
+			Response:       channelLog.Response,
+			ResponseStatus: channelLog.StatusCode,
+			CreatedOn:      channelLog.CreatedOn,
+			RequestTime:    int(channelLog.Elapsed / time.Millisecond),
+		})
+	}
+
+	return nil
 }
