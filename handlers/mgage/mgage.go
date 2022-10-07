@@ -197,7 +197,7 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 		status.SetCarrierID(carrierID.(string))
 
 		// store channel logs if exact channel can't be defined at the moment
-		if _, isEmptyMGACHannel := channel.(*EmptyMGAChannel); isEmptyMGACHannel {
+		if _, isEmptyMGAChannel := channel.(*EmptyMGAChannel); isEmptyMGAChannel {
 			processStatusLogs(status, channel, r)
 		}
 		return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)

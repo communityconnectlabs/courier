@@ -412,7 +412,7 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
 			ID_:        status.ID(),
 			ChannelID_: status.ChannelID(),
-			GatewayID_: status.GatewayID(),
+			GatewayID_: sql.NullString{String: status.GatewayID(), Valid: true},
 		})
 		if err != nil {
 			return errors.Wrap(err, "error updating gateway ID")
@@ -421,8 +421,8 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 
 	if status.CarrierID() != "" {
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
-			GatewayID_: status.GatewayID(),
-			CarrierID_: status.CarrierID(),
+			GatewayID_: sql.NullString{String: status.GatewayID(), Valid: true},
+			CarrierID_: sql.NullString{String: status.CarrierID(), Valid: true},
 			Logs_:      logsToJSONString(status.Logs()),
 		})
 		if err != nil {
@@ -431,7 +431,7 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 	}
 
 	if status.ID() != courier.NilMsgID && status.ExternalID() != "" {
-		err := writeSavedChannelLogs(ctx, b, status.ChannelID(), status.ID(), status.ExternalID())
+		err := writeSavedChannelLogs(ctx, b, status.ExternalID())
 		if err != nil {
 			return errors.Wrap(err, "error moving channel logs for ExternalIDMap to ChannelLog table")
 		}
@@ -464,12 +464,12 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 	return nil
 }
 
-func logsToJSONString(logs []*courier.ChannelLog) json.RawMessage {
+func logsToJSONString(logs []*courier.ChannelLog) sql.NullString {
 	data, err := json.Marshal(logs)
 	if err != nil {
-		return nil
+		return sql.NullString{Valid: false}
 	}
-	return data
+	return sql.NullString{String: string(data), Valid: true}
 }
 
 // updateContactURN updates contact URN according to the old/new URNs from status

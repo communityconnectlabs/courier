@@ -417,11 +417,11 @@ func (mb *MockBackend) GetContactMessages(channel Channel, contact Contact) ([]M
 
 type mockMsgIDMap struct{}
 
-func (m mockMsgIDMap) ID() MsgID             { return NilMsgID }
-func (m mockMsgIDMap) GatewayID() string     { return "" }
-func (m mockMsgIDMap) CarrierID() string     { return "" }
-func (m mockMsgIDMap) ChannelID() ChannelID  { return NilChannelID }
-func (m mockMsgIDMap) Logs() json.RawMessage { return nil }
+func (m mockMsgIDMap) ID() MsgID            { return NilMsgID }
+func (m mockMsgIDMap) GatewayID() string    { return "" }
+func (m mockMsgIDMap) CarrierID() string    { return "" }
+func (m mockMsgIDMap) ChannelID() ChannelID { return NilChannelID }
+func (m mockMsgIDMap) Logs() string         { return "" }
 
 func (mb *MockBackend) GetMsgIDByExternalID(ctx context.Context, externalID string) (MsgIDMap, error) {
 	return &mockMsgIDMap{}, nil

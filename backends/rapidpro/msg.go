@@ -730,17 +730,17 @@ func (m *DBMsg) WithURNAuth(auth string) courier.Msg {
 
 type DBMsgIDMap struct {
 	ID_        courier.MsgID     `json:"message_id" db:"message_id"`
-	GatewayID_ string            `json:"gateway_id" db:"gateway_id"`
-	CarrierID_ string            `json:"carrier_id" db:"carrier_id"`
+	GatewayID_ sql.NullString    `json:"gateway_id" db:"gateway_id"`
+	CarrierID_ sql.NullString    `json:"carrier_id" db:"carrier_id"`
 	ChannelID_ courier.ChannelID `json:"channel_id" db:"channel_id"`
-	Logs_      json.RawMessage   `json:"logs"       db:"logs"`
+	Logs_      sql.NullString    `json:"logs"       db:"logs"`
 }
 
 func (m *DBMsgIDMap) ID() courier.MsgID            { return m.ID_ }
-func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_ }
-func (m *DBMsgIDMap) CarrierID() string            { return m.CarrierID_ }
+func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_.String }
+func (m *DBMsgIDMap) CarrierID() string            { return m.CarrierID_.String }
 func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
-func (m *DBMsgIDMap) Logs() json.RawMessage        { return m.Logs_ }
+func (m *DBMsgIDMap) Logs() string                 { return m.Logs_.String }
 
 const setIdsOnSentSQL = `
 INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, carrier_id, created_on, modified_on) 
@@ -857,7 +857,7 @@ func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (cou
 	return idMap, nil
 }
 
-func writeSavedChannelLogs(ctx context.Context, b *backend, channelID courier.ChannelID, msgID courier.MsgID, externalID string) error {
+func writeSavedChannelLogs(ctx context.Context, b *backend, externalID string) error {
 	msgIDMap, err := getMsgByExternalID(ctx, b, externalID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -866,16 +866,20 @@ func writeSavedChannelLogs(ctx context.Context, b *backend, channelID courier.Ch
 		return err
 	}
 
+	if msgIDMap.ID() == courier.NilMsgID || msgIDMap.ChannelID() == courier.NilChannelID || msgIDMap.Logs() == "" {
+		return nil
+	}
+
 	var logs []*courier.ChannelLog
-	err = json.Unmarshal(msgIDMap.Logs(), &logs)
+	err = json.Unmarshal([]byte(msgIDMap.Logs()), &logs)
 	if err != nil {
 		return err
 	}
 
 	for _, channelLog := range logs {
 		b.logCommitter.Queue(&ChannelLog{
-			ChannelID:      channelID,
-			MsgID:          msgID,
+			ChannelID:      msgIDMap.ChannelID(),
+			MsgID:          msgIDMap.ID(),
 			Description:    channelLog.Description,
 			IsError:        channelLog.Error != "",
 			Method:         channelLog.Method,
