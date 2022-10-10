@@ -33,6 +33,34 @@ var testCases = []ChannelHandleTestCase{
 		URN:      Sp("tel:+18889099091"),
 		Date:     nil,
 	},
+	{
+		Label:    "Receive Enroute Status",
+		URL:      "/c/mga/status",
+		Data:     `{
+		  "msg_ref": "1234567890ABCDEF",
+		  "status": "U",
+		  "data": {
+			"CarrierID": "ABCDEF1234567890"
+         }
+		}`,
+		Status:   200,
+		Response: "Accepted",
+		NoQueueErrorCheck: true,
+		NoInvalidChannelCheck: true,
+	},
+	{
+		Label:    "Receive Delivered Status",
+		URL:      "/c/mga/status",
+		Data:     `{
+		  "msg_ref": "ABCDEF1234567890",
+		  "status": "D",
+		  "data": {}
+		}`,
+		Status:   200,
+		Response: "Accepted",
+		NoQueueErrorCheck: true,
+		NoInvalidChannelCheck: true,
+	},
 }
 
 var defaultSendTestCases = []ChannelSendTestCase{

@@ -415,8 +415,16 @@ func (mb *MockBackend) GetContactMessages(channel Channel, contact Contact) ([]M
 	return nil, nil
 }
 
+type mockMsgIDMap struct{}
+
+func (m mockMsgIDMap) ID() MsgID            { return NilMsgID }
+func (m mockMsgIDMap) GatewayID() string    { return "" }
+func (m mockMsgIDMap) CarrierID() string    { return "" }
+func (m mockMsgIDMap) ChannelID() ChannelID { return NilChannelID }
+func (m mockMsgIDMap) Logs() string         { return "" }
+
 func (mb *MockBackend) GetMsgIDByExternalID(ctx context.Context, externalID string) (MsgIDMap, error) {
-	return nil, nil
+	return &mockMsgIDMap{}, nil
 }
 
 func buildMockBackend(config *Config) Backend {
@@ -677,10 +685,16 @@ type mockMsgStatus struct {
 	logs []*ChannelLog
 }
 
-func (m *mockMsgStatus) ChannelID() ChannelID     { return NilChannelID }
-func (m *mockMsgStatus) ChannelUUID() ChannelUUID { return m.channel.UUID() }
-func (m *mockMsgStatus) ID() MsgID                { return m.id }
-func (m *mockMsgStatus) EventID() int64           { return int64(m.id) }
+func (m *mockMsgStatus) ChannelID() ChannelID { return NilChannelID }
+func (m *mockMsgStatus) ChannelUUID() ChannelUUID {
+	if m.channel != nil {
+		return m.channel.UUID()
+	} else {
+		return NilChannelUUID
+	}
+}
+func (m *mockMsgStatus) ID() MsgID      { return m.id }
+func (m *mockMsgStatus) EventID() int64 { return int64(m.id) }
 
 func (m *mockMsgStatus) SetUpdatedURN(old, new urns.URN) error {
 	m.oldURN = old

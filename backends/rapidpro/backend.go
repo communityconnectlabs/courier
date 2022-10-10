@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/nyaruka/courier/handlers/mgage"
 	"net/url"
 	"path"
 	"strings"
@@ -409,23 +410,36 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 
 	if status.ID() != courier.NilMsgID && status.GatewayID() != "" {
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
-			ID_: status.ID(),
+			ID_:        status.ID(),
 			ChannelID_: status.ChannelID(),
-			GatewayID_: status.GatewayID(),
+			GatewayID_: sql.NullString{String: status.GatewayID(), Valid: true},
 		})
 		if err != nil {
 			return errors.Wrap(err, "error updating gateway ID")
 		}
 	}
 
-	if status.GatewayID() != "" && status.CarrierID() != "" {
+	if status.CarrierID() != "" {
 		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
-			GatewayID_: status.GatewayID(),
-			CarrierID_: status.CarrierID(),
+			GatewayID_: sql.NullString{String: status.GatewayID(), Valid: true},
+			CarrierID_: sql.NullString{String: status.CarrierID(), Valid: true},
+			Logs_:      logsToJSONString(status.Logs()),
 		})
 		if err != nil {
 			return errors.Wrap(err, "error updating carrier ID")
 		}
+	}
+
+	if status.ID() != courier.NilMsgID && status.ExternalID() != "" {
+		err := writeSavedChannelLogs(ctx, b, status.ExternalID())
+		if err != nil {
+			return errors.Wrap(err, "error moving channel logs for ExternalIDMap to ChannelLog table")
+		}
+	}
+
+	// skip saving DBMsgStatus if channel is EmptyMGAChannel
+	if status.ID() == courier.NilMsgID && status.ChannelUUID() == courier.NilChannelUUID {
+		return nil
 	}
 
 	// if we have an ID, we can have our batch commit for us
@@ -448,6 +462,14 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 	}
 
 	return nil
+}
+
+func logsToJSONString(logs []*courier.ChannelLog) sql.NullString {
+	data, err := json.Marshal(logs)
+	if err != nil {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: string(data), Valid: true}
 }
 
 // updateContactURN updates contact URN according to the old/new URNs from status
@@ -528,6 +550,11 @@ func (b *backend) WriteChannelLogs(ctx context.Context, logs []*courier.ChannelL
 	defer cancel()
 
 	for _, l := range logs {
+		// skip log if channel is undefined MGA channel
+		if _, isEmptyMGA := l.Channel.(*mgage.EmptyMGAChannel); isEmptyMGA {
+			continue
+		}
+
 		err := writeChannelLog(timeout, b, l)
 		if err != nil {
 			logrus.WithError(err).Error("error writing channel log")

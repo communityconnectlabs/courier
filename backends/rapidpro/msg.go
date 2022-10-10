@@ -2,6 +2,7 @@ package rapidpro
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
@@ -728,28 +729,88 @@ func (m *DBMsg) WithURNAuth(auth string) courier.Msg {
 
 type DBMsgIDMap struct {
 	ID_        courier.MsgID     `json:"message_id" db:"message_id"`
-	GatewayID_ string            `json:"gateway_id" db:"gateway_id"`
-	CarrierID_ string            `json:"carrier_id" db:"carrier_id"`
+	GatewayID_ sql.NullString    `json:"gateway_id" db:"gateway_id"`
+	CarrierID_ sql.NullString    `json:"carrier_id" db:"carrier_id"`
 	ChannelID_ courier.ChannelID `json:"channel_id" db:"channel_id"`
+	Logs_      sql.NullString    `json:"logs"       db:"logs"`
 }
 
 func (m *DBMsgIDMap) ID() courier.MsgID            { return m.ID_ }
-func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_ }
-func (m *DBMsgIDMap) CarrierID() string            { return m.CarrierID_ }
+func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_.String }
+func (m *DBMsgIDMap) CarrierID() string            { return m.CarrierID_.String }
 func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
+func (m *DBMsgIDMap) Logs() string                 { return m.Logs_.String }
 
-const insertMsgExternalIDMapSQL = `
-INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, carrier_id, created_on, modified_on) VALUES(:message_id, :channel_id, :gateway_id, NULL, now(), now())
+const setIdsOnSentSQL = `
+INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, carrier_id, created_on, modified_on) 
+VALUES(:message_id, :channel_id, :gateway_id, NULL, now(), now()) ON CONFLICT (gateway_id) DO
+UPDATE SET message_id = :message_id, channel_id = :channel_id, modified_on = now() 
 `
 
-const updateMsgExternalIDMapSQL = `
-UPDATE msgs_messageexternalidmap SET carrier_id = :carrier_id, modified_on = now() WHERE gateway_id = :gateway_id
+const setIdsOnEnrouteSQL = `
+/* insert new id map record or update if record with same 'gateway_id' already exists */
+INSERT INTO msgs_messageexternalidmap(gateway_id, carrier_id, request_logs, created_on, modified_on)
+VALUES(:gateway_id, :carrier_id, :logs, now(), now()) 
+ON CONFLICT (gateway_id) DO
+	UPDATE SET
+		modified_on = now(),
+		carrier_id = :carrier_id,
+	
+		/* save request logs only in case when channel not defined */
+		request_logs = CASE WHEN msgs_messageexternalidmap.channel_id IS NOT NULL THEN
+			msgs_messageexternalidmap.request_logs
+		ELSE
+			/* set new logs or append if the logs already exist */
+			CASE WHEN msgs_messageexternalidmap.request_logs IS NULL THEN
+				:logs
+			ELSE
+				msgs_messageexternalidmap.request_logs || :logs
+			END
+		END
+`
+
+const setIdsOnEnrouteByCarrierIdSQL = `
+UPDATE msgs_messageexternalidmap SET
+	modified_on = now(),
+	gateway_id = :gateway_id,
+	/* save request logs only in case when channel not defined */
+	request_logs = CASE WHEN msgs_messageexternalidmap.channel_id IS NOT NULL THEN
+		msgs_messageexternalidmap.request_logs
+	ELSE
+		/* set new logs or append if the logs already exist */
+		CASE WHEN msgs_messageexternalidmap.request_logs IS NULL THEN
+			:logs
+		ELSE
+			msgs_messageexternalidmap.request_logs || :logs
+		END
+	END
+WHERE carrier_id = :carrier_id;
+`
+
+const setIdsOnDeliveredSQL = `
+INSERT INTO msgs_messageexternalidmap(carrier_id, request_logs, created_on, modified_on)
+VALUES(:carrier_id, :logs, now(), now()) 
+ON CONFLICT (carrier_id) DO
+	UPDATE SET
+		modified_on = now(),
+
+		/* save request logs only in case when channel not defined */
+		request_logs = CASE WHEN msgs_messageexternalidmap.channel_id IS NOT NULL THEN
+			msgs_messageexternalidmap.request_logs
+		ELSE
+			/* set new logs or append if the logs already exist */
+			CASE WHEN msgs_messageexternalidmap.request_logs IS NULL THEN
+				:logs
+			ELSE
+				msgs_messageexternalidmap.request_logs || :logs
+			END
+		END
 `
 
 func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) error {
 	// insert new gateway id for existing message
 	if m.ID() != courier.NilMsgID && m.ChannelID() != courier.NilChannelID && m.GatewayID() != "" {
-		_, err := b.db.NamedExecContext(ctx, insertMsgExternalIDMapSQL, m)
+		_, err := b.db.NamedExecContext(ctx, setIdsOnSentSQL, m)
 		if err != nil {
 			return errors.Wrap(err, "failed to insert gateway ID")
 		}
@@ -758,18 +819,32 @@ func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) e
 
 	// insert new carrier id for existing message
 	if m.GatewayID() != "" && m.CarrierID() != "" {
-		_, err := b.db.NamedExecContext(ctx, updateMsgExternalIDMapSQL, m)
-		if err != nil {
-			return errors.Wrap(err, "failed to update carrier ID")
+		_, err := b.GetMsgIDByExternalID(ctx, m.CarrierID())
+		if err == sql.ErrNoRows {
+			_, err := b.db.NamedExecContext(ctx, setIdsOnEnrouteSQL, m)
+			if err != nil {
+				return errors.Wrap(err, "failed to update carrier ID")
+			}
+		} else {
+			_, err := b.db.NamedExecContext(ctx, setIdsOnEnrouteByCarrierIdSQL, m)
+			if err != nil {
+				return errors.Wrap(err, "failed to update carrier ID")
+			}
 		}
 		RefreshSMPPChannelCache(courier.NilMsgID, m.GatewayID(), m.CarrierID())
 	}
 
+	if m.GatewayID() == "" && m.CarrierID() != "" {
+		_, err := b.db.NamedExecContext(ctx, setIdsOnDeliveredSQL, m)
+		if err != nil {
+			return errors.Wrap(err, "failed to update carrier ID")
+		}
+	}
 	return nil
 }
 
 const selectMsgByExternalID = `
-SELECT message_id, gateway_id, carrier_id, channel_id FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 ORDER BY modified_on DESC LIMIT 1;
+SELECT message_id, gateway_id, carrier_id, channel_id, request_logs as logs FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 ORDER BY modified_on DESC LIMIT 1;
 `
 
 func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (courier.MsgIDMap, error) {
@@ -779,4 +854,42 @@ func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (cou
 		return nil, err
 	}
 	return idMap, nil
+}
+
+func writeSavedChannelLogs(ctx context.Context, b *backend, externalID string) error {
+	msgIDMap, err := getMsgByExternalID(ctx, b, externalID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+
+	if msgIDMap.ID() == courier.NilMsgID || msgIDMap.ChannelID() == courier.NilChannelID || msgIDMap.Logs() == "" {
+		return nil
+	}
+
+	var logs []*courier.ChannelLog
+	err = json.Unmarshal([]byte(msgIDMap.Logs()), &logs)
+	if err != nil {
+		return err
+	}
+
+	for _, channelLog := range logs {
+		b.logCommitter.Queue(&ChannelLog{
+			ChannelID:      msgIDMap.ChannelID(),
+			MsgID:          msgIDMap.ID(),
+			Description:    channelLog.Description,
+			IsError:        channelLog.Error != "",
+			Method:         channelLog.Method,
+			URL:            channelLog.URL,
+			Request:        channelLog.Request,
+			Response:       channelLog.Response,
+			ResponseStatus: channelLog.StatusCode,
+			CreatedOn:      channelLog.CreatedOn,
+			RequestTime:    int(channelLog.Elapsed / time.Millisecond),
+		})
+	}
+
+	return nil
 }

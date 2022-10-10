@@ -119,5 +119,18 @@ CREATE TABLE flows_flowsession (
     wait_started_on timestamp with time zone
 );
 
+DROP TABLE IF EXISTS msgs_messageexternalidmap CASCADE;
+CREATE TABLE msgs_messageexternalidmap
+(
+    id           serial not null primary key,
+    message_id   bigint,
+    channel_id   integer,
+    gateway_id   varchar(64) unique,
+    carrier_id   varchar(64) unique,
+    created_on   timestamp with time zone not null,
+    modified_on  timestamp with time zone not null,
+    request_logs jsonb
+);
+
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO courier;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO courier;

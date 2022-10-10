@@ -19,11 +19,14 @@ import (
 
 // newMsgStatus creates a new DBMsgStatus for the passed in parameters
 func newMsgStatus(channel courier.Channel, id courier.MsgID, externalID string, status courier.MsgStatusValue) *DBMsgStatus {
-	dbChannel := channel.(*DBChannel)
+	var channelID = courier.NilChannelID
+	if dbChannel, ok := channel.(*DBChannel); ok {
+		channelID = dbChannel.ID()
+	}
 
 	return &DBMsgStatus{
 		ChannelUUID_: channel.UUID(),
-		ChannelID_:   dbChannel.ID(),
+		ChannelID_:   channelID,
 		ID_:          id,
 		OldURN_:      urns.NilURN,
 		NewURN_:      urns.NilURN,

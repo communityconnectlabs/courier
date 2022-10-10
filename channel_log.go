@@ -102,15 +102,15 @@ func (l *ChannelLog) String() string {
 // and response for the action as well as the channel it was performed on and an option ID of the msg (for some error
 // cases we may log without a msg id)
 type ChannelLog struct {
-	Description string
-	Channel     Channel
-	MsgID       MsgID
-	Method      string
-	URL         string
-	StatusCode  int
-	Error       string
-	Request     string
-	Response    string
-	Elapsed     time.Duration
-	CreatedOn   time.Time
+	Description string        `json:"description"`
+	Channel     Channel       `json:"-"`
+	MsgID       MsgID         `json:"-"`
+	Method      string        `json:"method"`
+	URL         string        `json:"url"`
+	StatusCode  int           `json:"status_code"`
+	Error       string        `json:"error"`
+	Request     string        `json:"request"`
+	Response    string        `json:"response"`
+	Elapsed     time.Duration `json:"elapsed"`
+	CreatedOn   time.Time     `json:"created_on"`
 }
