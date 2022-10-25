@@ -90,6 +90,8 @@ type ChannelSendTestCase struct {
 	ResponseToID         int64
 	ResponseToExternalID string
 	Metadata             json.RawMessage
+	ReceiveAttachment    string
+	SharingConfig        json.RawMessage
 
 	ResponseStatus int
 	ResponseBody   string
@@ -207,12 +209,16 @@ func newServer(backend courier.Backend) courier.Server {
 }
 
 // RunChannelSendTestCases runs all the passed in test cases against the channel
-func RunChannelSendTestCases(t *testing.T, channel courier.Channel, handler courier.ChannelHandler, testCases []ChannelSendTestCase, setupBackend func(*courier.MockBackend)) {
-	mb := courier.NewMockBackend()
-	if setupBackend != nil {
-		setupBackend(mb)
+func RunChannelSendTestCases(t *testing.T, channel courier.Channel, handler courier.ChannelHandler, testCases []ChannelSendTestCase, setupBackendAndServer func() (*courier.MockBackend, courier.Server)) {
+	var s courier.Server
+	var mb *courier.MockBackend
+	if setupBackendAndServer != nil {
+		mb, s = setupBackendAndServer()
+	} else {
+		mb = courier.NewMockBackend()
+		s = newServer(mb)
 	}
-	s := newServer(mb)
+
 	mb.AddChannel(channel)
 	handler.Initialize(s)
 

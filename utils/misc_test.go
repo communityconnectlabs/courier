@@ -120,3 +120,10 @@ func TestStringsToRows(t *testing.T) {
 		assert.Equal(t, tc.expected, rows, "rows mismatch for replies %v", tc.replies)
 	}
 }
+
+func TestDecodeUTF8(t *testing.T) {
+	data := []byte("\u2022")
+	decoded := utils.DecodeUTF8(data)
+
+	assert.Equal(t, "•", decoded)
+}

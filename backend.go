@@ -29,6 +29,9 @@ type Backend interface {
 	// GetChannelByAddress returns the channel with the passed in type and address
 	GetChannelByAddress(context.Context, ChannelType, ChannelAddress) (Channel, error)
 
+	// GetMsgChannel returns the channel of Msg by MsgID or ExternalID
+	GetMsgChannel(context.Context, ChannelType, MsgID, string) (Channel, error)
+
 	// GetContact returns (or creates) the contact for the passed in channel and URN
 	GetContact(context context.Context, channel Channel, urn urns.URN, auth string, name string) (Contact, error)
 
@@ -38,17 +41,35 @@ type Backend interface {
 	// RemoveURNFromcontact removes a URN from the passed in contact
 	RemoveURNfromContact(context context.Context, channel Channel, contact Contact, urn urns.URN) (urns.URN, error)
 
+	// AddLanguageToContact adds a language to a contact
+	AddLanguageToContact(ctx context.Context, channel Channel, language string, contact Contact) (Contact, error)
+
+	// GetContactMessages load all messages by channel and contact
+	GetContactMessages(channel Channel, contact Contact) ([]Msg, error)
+
 	// NewIncomingMsg creates a new message from the given params
 	NewIncomingMsg(channel Channel, urn urns.URN, text string) Msg
 
+	// NewOutgoingMsg creates a new outgoing message from the given params
+	NewOutgoingMsg(channel Channel, id MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToID int64, responseToExternalID string) Msg
+
 	// WriteMsg writes the passed in message to our backend
 	WriteMsg(context.Context, Msg) error
+
+	// NewMsgAttachmentForExternalID creates a new Attachment object for the given message id
+	NewMsgAttachmentForExternalID(Channel, string, string) (MsgAttachment, error)
+
+	// WriteMsg writes the passed in message to our backend
+	WriteMsgAttachment(context.Context, Channel, *MsgAttachment) error
 
 	// NewMsgStatusForID creates a new Status object for the given message id
 	NewMsgStatusForID(Channel, MsgID, MsgStatusValue) MsgStatus
 
 	// NewMsgStatusForExternalID creates a new Status object for the given external id
 	NewMsgStatusForExternalID(Channel, string, MsgStatusValue) MsgStatus
+
+	// GetMsgIDByExternalID
+	GetMsgIDByExternalID(context.Context, string) (MsgIDMap, error)
 
 	// WriteMsgStatus writes the passed in status update to our backend
 	WriteMsgStatus(context.Context, MsgStatus) error

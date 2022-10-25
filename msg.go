@@ -98,6 +98,8 @@ type Msg interface {
 	ResponseToID() MsgID
 	ResponseToExternalID() string
 	IsResend() bool
+	ReceiveAttachment() string
+	SharingConfig() json.RawMessage
 
 	Channel() Channel
 
@@ -117,4 +119,17 @@ type Msg interface {
 
 	EventID() int64
 	SessionStatus() string
+}
+
+//-----------------------------------------------------------------------------
+// MsgIDMap interface
+//-----------------------------------------------------------------------------
+
+// MsgIDMap is our interface to represent an incoming or outgoing message
+type MsgIDMap interface {
+	ID() MsgID
+	GatewayID() string
+	CarrierID() string
+	ChannelID() ChannelID
+	Logs()      string
 }

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/nyaruka/courier/handlers/mgage"
 	"net/url"
 	"path"
 	"strings"
@@ -64,6 +65,14 @@ func (b *backend) GetChannelByAddress(ctx context.Context, ct courier.ChannelTyp
 	return getChannelByAddress(timeout, b.db, ct, address)
 }
 
+// GetMsgChannel returns the channel of Msg by MsgID or ExternalID
+func (b *backend) GetMsgChannel(ctx context.Context, ct courier.ChannelType, msgID courier.MsgID, externalID string) (courier.Channel, error) {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	return getChannelByMsg(timeout, b.db, ct, msgID, externalID)
+}
+
 // GetContact returns the contact for the passed in channel and URN
 func (b *backend) GetContact(ctx context.Context, c courier.Channel, urn urns.URN, auth string, name string) (courier.Contact, error) {
 	dbChannel := c.(*DBChannel)
@@ -110,6 +119,42 @@ func (b *backend) RemoveURNfromContact(ctx context.Context, c courier.Channel, c
 	return urn, nil
 }
 
+const updateContactLang = `
+UPDATE
+	contacts_contact
+SET
+	language = $1
+WHERE
+	id = $2 AND
+	org_id = $3
+`
+
+// AddLanguageToContact adds a language to the passed in contact
+func (b *backend) AddLanguageToContact(ctx context.Context, c courier.Channel, language string, contact courier.Contact) (courier.Contact, error) {
+	dbContact := contact.(*DBContact)
+	_, err := b.db.ExecContext(ctx, updateContactLang, language, dbContact.ID_, dbContact.OrgID_)
+	if err != nil {
+		return contact, err
+	}
+	return contact, nil
+}
+
+// GetContactMessages load all messages by channel and contact
+func (b *backend) GetContactMessages(channel courier.Channel, contact courier.Contact) ([]courier.Msg, error) {
+	dbChannel := channel.(*DBChannel)
+	dbContact := contact.(*DBContact)
+	dbMsgs, err := readMessagesFromDB(b, dbChannel.ID_, dbContact.ID_)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := make([]courier.Msg, 0)
+	for _, dbMsg := range dbMsgs {
+		messages = append(messages, courier.Msg(dbMsg))
+	}
+	return messages, nil
+}
+
 // NewIncomingMsg creates a new message from the given params
 func (b *backend) NewIncomingMsg(channel courier.Channel, urn urns.URN, text string) courier.Msg {
 	// remove any control characters
@@ -132,7 +177,7 @@ func (b *backend) NewIncomingMsg(channel courier.Channel, urn urns.URN, text str
 }
 
 // NewOutgoingMsg creates a new outgoing message from the given params
-func (b *backend) NewOutgoingMsg(channel courier.Channel, urn urns.URN, text string) courier.Msg {
+func (b *backend) NewOutgoingMsg(channel courier.Channel, id courier.MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToID int64, responseToExternalID string) courier.Msg {
 	return newMsg(MsgOutgoing, channel, urn, text)
 }
 
@@ -308,8 +353,30 @@ func (b *backend) MarkOutgoingMsgComplete(ctx context.Context, msg courier.Msg, 
 func (b *backend) WriteMsg(ctx context.Context, m courier.Msg) error {
 	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
 	defer cancel()
+	if utils.CheckOptOutKeywordPresence(m.Text()) {
+		event := b.NewChannelEvent(m.Channel(), courier.StopConversation, m.URN()).WithExtra(map[string]interface{}{
+			"opt_out_message":  m.Text(),
+			"opt_out_datetime": m.ReceivedOn(),
+		})
+		return writeChannelEvent(timeout, b, event)
+	} else {
+		return writeMsg(timeout, b, m)
+	}
+}
 
-	return writeMsg(timeout, b, m)
+// NewMsgAttachmentForExternalID creates a new Attachment object for the given message id
+func (b *backend) NewMsgAttachmentForExternalID(channel courier.Channel, externalID string, attachmentUrl string) (courier.MsgAttachment, error) {
+	attachment := newMsgAttachment(channel, externalID, attachmentUrl)
+	err := validateMsgAttachmentInDB(b, attachment)
+	return attachment, err
+}
+
+// WriteMsgAttachment writes the passed in attachment to our store
+func (b *backend) WriteMsgAttachment(ctx context.Context, channel courier.Channel, attachment *courier.MsgAttachment) error {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	return writeMsgAttachment(timeout, b, channel, attachment)
 }
 
 // NewStatusUpdateForID creates a new Status object for the given message id
@@ -320,6 +387,13 @@ func (b *backend) NewMsgStatusForID(channel courier.Channel, id courier.MsgID, s
 // NewStatusUpdateForID creates a new Status object for the given message id
 func (b *backend) NewMsgStatusForExternalID(channel courier.Channel, externalID string, status courier.MsgStatusValue) courier.MsgStatus {
 	return newMsgStatus(channel, courier.NilMsgID, externalID, status)
+}
+
+func (b *backend) GetMsgIDByExternalID(ctx context.Context, externalID string) (courier.MsgIDMap, error) {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	return getMsgByExternalID(timeout, b, externalID)
 }
 
 // WriteMsgStatus writes the passed in MsgStatus to our store
@@ -333,6 +407,41 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 			return errors.Wrap(err, "error updating contact URN")
 		}
 	}
+
+	if status.ID() != courier.NilMsgID && status.GatewayID() != "" {
+		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
+			ID_:        status.ID(),
+			ChannelID_: status.ChannelID(),
+			GatewayID_: sql.NullString{String: status.GatewayID(), Valid: true},
+		})
+		if err != nil {
+			return errors.Wrap(err, "error updating gateway ID")
+		}
+	}
+
+	if status.CarrierID() != "" {
+		err := writeMsgExternalIDMapToDB(ctx, b, &DBMsgIDMap{
+			GatewayID_: sql.NullString{String: status.GatewayID(), Valid: true},
+			CarrierID_: sql.NullString{String: status.CarrierID(), Valid: true},
+			Logs_:      logsToJSONString(status.Logs()),
+		})
+		if err != nil {
+			return errors.Wrap(err, "error updating carrier ID")
+		}
+	}
+
+	if status.ID() != courier.NilMsgID && status.ExternalID() != "" {
+		err := writeSavedChannelLogs(ctx, b, status.ExternalID())
+		if err != nil {
+			return errors.Wrap(err, "error moving channel logs for ExternalIDMap to ChannelLog table")
+		}
+	}
+
+	// skip saving DBMsgStatus if channel is EmptyMGAChannel
+	if status.ID() == courier.NilMsgID && status.ChannelUUID() == courier.NilChannelUUID {
+		return nil
+	}
+
 	// if we have an ID, we can have our batch commit for us
 	if status.ID() != courier.NilMsgID {
 		b.statusCommitter.Queue(status.(*DBMsgStatus))
@@ -353,6 +462,14 @@ func (b *backend) WriteMsgStatus(ctx context.Context, status courier.MsgStatus) 
 	}
 
 	return nil
+}
+
+func logsToJSONString(logs []*courier.ChannelLog) sql.NullString {
+	data, err := json.Marshal(logs)
+	if err != nil {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: string(data), Valid: true}
 }
 
 // updateContactURN updates contact URN according to the old/new URNs from status
@@ -420,6 +537,7 @@ func (b *backend) NewChannelEvent(channel courier.Channel, eventType courier.Cha
 
 // WriteChannelEvent writes the passed in channel even returning any error
 func (b *backend) WriteChannelEvent(ctx context.Context, event courier.ChannelEvent) error {
+
 	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
 	defer cancel()
 
@@ -432,6 +550,11 @@ func (b *backend) WriteChannelLogs(ctx context.Context, logs []*courier.ChannelL
 	defer cancel()
 
 	for _, l := range logs {
+		// skip log if channel is undefined MGA channel
+		if _, isEmptyMGA := l.Channel.(*mgage.EmptyMGAChannel); isEmptyMGA {
+			continue
+		}
+
 		err := writeChannelLog(timeout, b, l)
 		if err != nil {
 			logrus.WithError(err).Error("error writing channel log")
@@ -695,7 +818,7 @@ func (b *backend) Start() error {
 		if err != nil {
 			return err
 		}
-		b.storage = storage.NewS3(s3Client, b.config.S3MediaBucket, b.config.S3Region, 32)
+		b.storage = storage.NewPrivateS3(s3Client, b.config.S3MediaBucket, b.config.MaxWorkers, b.config.S3PublicAccessEndpoint)
 	} else {
 		b.storage = storage.NewFS("_storage")
 	}

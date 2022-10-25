@@ -141,6 +141,18 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 	// build our msg
 	msg := h.Backend().NewIncomingMsg(channel, urn, form.Body).WithExternalID(form.MessageSID)
 
+	// check whether it's a short code and the text contains opt-out words
+	if len(channel.Address()) <= 6 && utils.CheckOptOutKeywordPresence(msg.Text()) {
+		textMessage := channel.OrgConfigForKey(utils.OptOutMessageBackKey, utils.OptOutDefaultMessageBack)
+		msgBack := h.Backend().NewOutgoingMsg(
+			channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", 0, "",
+		)
+		_, err := h.SendMsg(ctx, msgBack)
+		if err != nil {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+		}
+	}
+
 	// process any attached media
 	for i := 0; i < form.NumMedia; i++ {
 		mediaURL := r.PostForm.Get(fmt.Sprintf("MediaUrl%d", i))
@@ -189,6 +201,11 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 	if status == nil {
 		status = h.Backend().NewMsgStatusForExternalID(channel, form.MessageSID, msgStatus)
 	}
+
+	if status.ID() == courier.NilMsgID && status.ExternalID() == "" {
+		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
+	}
+
 	return handlers.WriteMsgStatusAndResponse(ctx, h, channel, status, w, r)
 }
 

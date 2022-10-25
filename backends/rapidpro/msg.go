@@ -2,8 +2,10 @@ package rapidpro
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -18,15 +20,21 @@ import (
 
 	"mime"
 
+	"bytes"
 	"github.com/gomodule/redigo/redis"
 	"github.com/lib/pq"
+	"github.com/nfnt/resize"
 	"github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/queue"
 	"github.com/nyaruka/courier/utils"
 	"github.com/nyaruka/gocommon/urns"
+	"github.com/nyaruka/gocommon/uuids"
 	"github.com/nyaruka/null"
 	"github.com/sirupsen/logrus"
 	filetype "gopkg.in/h2non/filetype.v1"
+	"image"
+	"image/jpeg"
+	"image/png"
 )
 
 // MsgDirection is the direction of a message
@@ -212,6 +220,55 @@ WHERE
     ch.id = $1
 `
 
+// GetContactMessages
+const selectContactMessagesSQL = `
+SELECT
+	org_id,
+	direction,
+	text,
+	attachments,
+	msg_count,
+	error_count,
+	high_priority,
+	status,
+	visibility,
+	external_id,
+	channel_id,
+	contact_id,
+	contact_urn_id,
+	created_on,
+	modified_on,
+	queued_on,
+	sent_on
+FROM
+	msgs_msg m
+WHERE
+	m.contact_id = $1 AND
+	m.channel_id = $2
+ORDER BY
+	created_on ASC
+`
+
+func readMessagesFromDB(b *backend, channelID courier.ChannelID, contactID ContactID) ([]*DBMsg, error) {
+	rows, err := b.db.Queryx(selectContactMessagesSQL, contactID, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// read our URNs out
+	msgs := make([]*DBMsg, 0)
+	for rows.Next() {
+		msg := &DBMsg{}
+		err = rows.StructScan(msg)
+		if err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs, nil
+}
+
 //-----------------------------------------------------------------------------
 // Media download and classification
 //-----------------------------------------------------------------------------
@@ -289,9 +346,37 @@ func downloadMediaToS3(ctx context.Context, b *backend, channel courier.Channel,
 	}
 
 	// create our filename
-	filename := msgUUID.String()
+	filename := string(uuids.New())
+
+	// if we have images as an attachment to be downloaded to S3, making sure that our files will have 1920px as a limit of size
+	if mimeType == "image/png" || mimeType == "image/jpeg" || mimeType == "image/jpg" {
+		// Do the resizing here
+		file := bytes.NewReader(body)
+		img, _, _ := image.Decode(file)
+
+		if img != nil {
+			resized := resize.Thumbnail(1920, 1920, img, resize.NearestNeighbor)
+			tmpImageName := fmt.Sprintf("/tmp/%s.%s", filename, extension)
+			outResized, _ := os.Create(tmpImageName)
+
+			defer outResized.Close()
+
+			// write new image to file
+			if strings.ToLower(extension) == "png" {
+				png.Encode(outResized, resized)
+			} else {
+				jpeg.Encode(outResized, resized, nil)
+			}
+
+			body, _ = ioutil.ReadFile(tmpImageName)
+
+			// Removing the file created on /tmp directory
+			os.Remove(tmpImageName)
+		}
+	}
+
 	if extension != "" {
-		filename = fmt.Sprintf("%s.%s", msgUUID, extension)
+		filename = fmt.Sprintf("%s.%s", filename, extension)
 	}
 	path := filepath.Join(b.config.S3MediaPrefix, strconv.FormatInt(int64(orgID), 10), filename[:4], filename[4:8], filename)
 	if !strings.HasPrefix(path, "/") {
@@ -568,6 +653,22 @@ func (m *DBMsg) Topic() string {
 	return string(topic)
 }
 
+func (m *DBMsg) ReceiveAttachment() string {
+	if m.Metadata_ == nil {
+		return ""
+	}
+	receiveAttachment, _, _, _ := jsonparser.Get(m.Metadata_, "receive_attachment")
+	return string(receiveAttachment)
+}
+
+func (m *DBMsg) SharingConfig() json.RawMessage {
+	if m.Metadata_ == nil {
+		return nil
+	}
+	sharingConfig, _, _, _ := jsonparser.Get(m.Metadata_, "sharing_config")
+	return sharingConfig
+}
+
 // Metadata returns the metadata for this message
 func (m *DBMsg) Metadata() json.RawMessage {
 	return m.Metadata_
@@ -606,4 +707,175 @@ func (m *DBMsg) WithAttachment(url string) courier.Msg {
 func (m *DBMsg) WithURNAuth(auth string) courier.Msg {
 	m.URNAuth_ = auth
 	return m
+}
+
+//-----------------------------------------------------------------------------
+// Our implementation of MessageExternalIDMap interface
+//-----------------------------------------------------------------------------
+
+type DBMsgIDMap struct {
+	ID_        courier.MsgID     `json:"message_id" db:"message_id"`
+	GatewayID_ sql.NullString    `json:"gateway_id" db:"gateway_id"`
+	CarrierID_ sql.NullString    `json:"carrier_id" db:"carrier_id"`
+	ChannelID_ courier.ChannelID `json:"channel_id" db:"channel_id"`
+	Logs_      sql.NullString    `json:"logs"       db:"logs"`
+}
+
+func (m *DBMsgIDMap) ID() courier.MsgID            { return m.ID_ }
+func (m *DBMsgIDMap) GatewayID() string            { return m.GatewayID_.String }
+func (m *DBMsgIDMap) CarrierID() string            { return m.CarrierID_.String }
+func (m *DBMsgIDMap) ChannelID() courier.ChannelID { return m.ChannelID_ }
+func (m *DBMsgIDMap) Logs() string                 { return m.Logs_.String }
+
+const setIdsOnSentSQL = `
+INSERT INTO msgs_messageexternalidmap(message_id, channel_id, gateway_id, carrier_id, created_on, modified_on) 
+VALUES(:message_id, :channel_id, :gateway_id, NULL, now(), now()) ON CONFLICT (gateway_id) DO
+UPDATE SET message_id = :message_id, channel_id = :channel_id, modified_on = now() 
+`
+
+const setIdsOnEnrouteSQL = `
+/* insert new id map record or update if record with same 'gateway_id' already exists */
+INSERT INTO msgs_messageexternalidmap(gateway_id, carrier_id, request_logs, created_on, modified_on)
+VALUES(:gateway_id, :carrier_id, :logs, now(), now()) 
+ON CONFLICT (gateway_id) DO
+	UPDATE SET
+		modified_on = now(),
+		carrier_id = :carrier_id,
+	
+		/* save request logs only in case when channel not defined */
+		request_logs = CASE WHEN msgs_messageexternalidmap.channel_id IS NOT NULL THEN
+			msgs_messageexternalidmap.request_logs
+		ELSE
+			/* set new logs or append if the logs already exist */
+			CASE WHEN msgs_messageexternalidmap.request_logs IS NULL THEN
+				:logs
+			ELSE
+				msgs_messageexternalidmap.request_logs || :logs
+			END
+		END
+`
+
+const setIdsOnEnrouteByCarrierIdSQL = `
+UPDATE msgs_messageexternalidmap SET
+	modified_on = now(),
+	gateway_id = :gateway_id,
+	/* save request logs only in case when channel not defined */
+	request_logs = CASE WHEN msgs_messageexternalidmap.channel_id IS NOT NULL THEN
+		msgs_messageexternalidmap.request_logs
+	ELSE
+		/* set new logs or append if the logs already exist */
+		CASE WHEN msgs_messageexternalidmap.request_logs IS NULL THEN
+			:logs
+		ELSE
+			msgs_messageexternalidmap.request_logs || :logs
+		END
+	END
+WHERE carrier_id = :carrier_id;
+`
+
+const setIdsOnDeliveredSQL = `
+INSERT INTO msgs_messageexternalidmap(carrier_id, request_logs, created_on, modified_on)
+VALUES(:carrier_id, :logs, now(), now()) 
+ON CONFLICT (carrier_id) DO
+	UPDATE SET
+		modified_on = now(),
+
+		/* save request logs only in case when channel not defined */
+		request_logs = CASE WHEN msgs_messageexternalidmap.channel_id IS NOT NULL THEN
+			msgs_messageexternalidmap.request_logs
+		ELSE
+			/* set new logs or append if the logs already exist */
+			CASE WHEN msgs_messageexternalidmap.request_logs IS NULL THEN
+				:logs
+			ELSE
+				msgs_messageexternalidmap.request_logs || :logs
+			END
+		END
+`
+
+func writeMsgExternalIDMapToDB(ctx context.Context, b *backend, m *DBMsgIDMap) error {
+	// insert new gateway id for existing message
+	if m.ID() != courier.NilMsgID && m.ChannelID() != courier.NilChannelID && m.GatewayID() != "" {
+		_, err := b.db.NamedExecContext(ctx, setIdsOnSentSQL, m)
+		if err != nil {
+			return errors.Wrap(err, "failed to insert gateway ID")
+		}
+		RefreshSMPPChannelCache(m.ID(), m.GatewayID(), "")
+	}
+
+	// insert new carrier id for existing message
+	if m.GatewayID() != "" && m.CarrierID() != "" {
+		_, err := b.GetMsgIDByExternalID(ctx, m.CarrierID())
+		if err == sql.ErrNoRows {
+			_, err := b.db.NamedExecContext(ctx, setIdsOnEnrouteSQL, m)
+			if err != nil {
+				return errors.Wrap(err, "failed to update carrier ID")
+			}
+		} else {
+			_, err := b.db.NamedExecContext(ctx, setIdsOnEnrouteByCarrierIdSQL, m)
+			if err != nil {
+				return errors.Wrap(err, "failed to update carrier ID")
+			}
+		}
+		RefreshSMPPChannelCache(courier.NilMsgID, m.GatewayID(), m.CarrierID())
+	}
+
+	if m.GatewayID() == "" && m.CarrierID() != "" {
+		_, err := b.db.NamedExecContext(ctx, setIdsOnDeliveredSQL, m)
+		if err != nil {
+			return errors.Wrap(err, "failed to update carrier ID")
+		}
+	}
+	return nil
+}
+
+const selectMsgByExternalID = `
+SELECT message_id, gateway_id, carrier_id, channel_id, request_logs as logs FROM msgs_messageexternalidmap WHERE gateway_id = $1 OR carrier_id = $1 ORDER BY modified_on DESC LIMIT 1;
+`
+
+func getMsgByExternalID(ctx context.Context, b *backend, externalID string) (courier.MsgIDMap, error) {
+	idMap := &DBMsgIDMap{}
+	err := b.db.GetContext(ctx, idMap, selectMsgByExternalID, externalID)
+	if err != nil {
+		return nil, err
+	}
+	return idMap, nil
+}
+
+func writeSavedChannelLogs(ctx context.Context, b *backend, externalID string) error {
+	msgIDMap, err := getMsgByExternalID(ctx, b, externalID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+
+	if msgIDMap.ID() == courier.NilMsgID || msgIDMap.ChannelID() == courier.NilChannelID || msgIDMap.Logs() == "" {
+		return nil
+	}
+
+	var logs []*courier.ChannelLog
+	err = json.Unmarshal([]byte(msgIDMap.Logs()), &logs)
+	if err != nil {
+		return err
+	}
+
+	for _, channelLog := range logs {
+		b.logCommitter.Queue(&ChannelLog{
+			ChannelID:      msgIDMap.ChannelID(),
+			MsgID:          msgIDMap.ID(),
+			Description:    channelLog.Description,
+			IsError:        channelLog.Error != "",
+			Method:         channelLog.Method,
+			URL:            channelLog.URL,
+			Request:        channelLog.Request,
+			Response:       channelLog.Response,
+			ResponseStatus: channelLog.StatusCode,
+			CreatedOn:      channelLog.CreatedOn,
+			RequestTime:    int(channelLog.Elapsed / time.Millisecond),
+		})
+	}
+
+	return nil
 }
