@@ -6,10 +6,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/foril/splitsms"
 	"github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/handlers"
 	"github.com/nyaruka/courier/utils"
-	"github.com/nyaruka/gocommon/gsm7"
 	"github.com/nyaruka/gocommon/urns"
 	"github.com/nyaruka/phonenumbers"
 	"github.com/pkg/errors"
@@ -45,25 +45,28 @@ func (h *handler) SendMsg(_ context.Context, msg courier.Msg) (courier.MsgStatus
 	}
 
 	msgEncoding := GSM7
-	isGSM := gsm7.IsValid(msg.Text())
-	if !isGSM {
+	if splitsms.IsUnicode(msg.Text()) {
 		msgEncoding = UCS2
 	}
 
-	if h.shouldSplit(msg.Text(), msgEncoding) {
+	msgInfo := splitsms.Message{FullContent: msg.Text()}
+	split, err := msgInfo.Split()
+	if err != nil {
+		return nil, err
+	}
+
+	if split.CountParts > 1 {
 		status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
-		parts := h.encodeSplit(msg.Text(), msgEncoding)
-		partsLength := len(parts)
-		for index, part := range parts {
+		for index, part := range split.Parts {
 			msgID, _ := strconv.Atoi(msg.ID().String())
 			payload := &moPayload{
 				ID:       int32(msgID),
 				Sender:   msg.Channel().Address(),
 				Receiver: msg.URN().Path(),
-				Text:     part,
-				Encoding: string(msgEncoding),
+				Text:     part.Content,
+				Encoding: msgEncoding,
 				PartNum:  int32(index + 1),
-				Parts:    int32(partsLength),
+				Parts:    int32(split.CountParts),
 			}
 
 			rr, err := h.sendToSMPP(payload)
@@ -81,7 +84,7 @@ func (h *handler) SendMsg(_ context.Context, msg courier.Msg) (courier.MsgStatus
 			Sender:   msg.Channel().Address(),
 			Receiver: msg.URN().Path(),
 			Text:     msg.Text(),
-			Encoding: string(msgEncoding),
+			Encoding: msgEncoding,
 			PartNum:  1,
 			Parts:    1,
 		}
@@ -206,7 +209,7 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
 		msgIDMap, err := h.Backend().GetMsgIDByExternalID(ctx, payload.MsgRef)
-		if err == sql.ErrNoRows || (msgIDMap != nil && msgIDMap.ID() == courier.NilMsgID)  {
+		if err == sql.ErrNoRows || (msgIDMap != nil && msgIDMap.ID() == courier.NilMsgID) {
 			// save channel logs if exact channel can't be defined at the moment
 			status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgDelivered)
 			status.SetCarrierID(payload.MsgRef)
@@ -268,37 +271,6 @@ func processStatusLogs(status courier.MsgStatus, channel courier.Channel, r *htt
 	}
 }
 
-func (h *handler) shouldSplit(text string, encoding MsgEncoding) (shouldSplit bool) {
-	if encoding == UCS2 {
-		return uint(len(text)*2) > SmMsgLen
-	}
-	return uint(len(text)) > SmMsgLen
-}
-
-func (h *handler) encodeSplit(text string, encoding MsgEncoding) []string {
-	var allSeg []string
-	var runeSlice = []rune(text)
-	var octetLimit = 134
-	var hextetLimit = int(octetLimit / 2) // round down
-
-	limit := octetLimit
-	if encoding != GSM7 {
-		limit = hextetLimit
-	}
-
-	fr, to := 0, limit
-	for fr < len(runeSlice) {
-		if to > len(runeSlice) {
-			to = len(runeSlice)
-		}
-		seg := string(runeSlice[fr:to])
-		allSeg = append(allSeg, seg)
-		fr, to = to, to+limit
-	}
-
-	return allSeg
-}
-
 func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
 	smppEndpoint := fmt.Sprintf("%s/send-msg", h.Server().Config().SMPPServerEndpoint)
 	jsonBody, err := json.Marshal(data)
@@ -321,19 +293,18 @@ func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
 type MsgEncoding string
 
 const (
-	GSM7     MsgEncoding = "GSM7"
-	UCS2     MsgEncoding = "UCS2"
-	SmMsgLen uint        = 140
+	GSM7 MsgEncoding = "GSM7"
+	UCS2 MsgEncoding = "UCS2"
 )
 
 type moPayload struct {
-	ID       int32  `json:"id,omitempty"`
-	Sender   string `json:"sender"`
-	Receiver string `json:"receiver"`
-	Encoding string `json:"encoding"`
-	Text     string `json:"text"`
-	Parts    int32  `json:"parts"`
-	PartNum  int32  `json:"part_num"`
+	ID       int32       `json:"id,omitempty"`
+	Sender   string      `json:"sender"`
+	Receiver string      `json:"receiver"`
+	Encoding MsgEncoding `json:"encoding"`
+	Text     string      `json:"text"`
+	Parts    int32       `json:"parts"`
+	PartNum  int32       `json:"part_num"`
 }
 
 type eventPayload struct {
