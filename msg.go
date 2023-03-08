@@ -102,6 +102,8 @@ type Msg interface {
 	Metadata() json.RawMessage
 	ResponseToExternalID() string
 	IsResend() bool
+	ReceiveAttachment() string
+	SharingConfig() json.RawMessage
 
 	Flow() *FlowReference
 	FlowName() string
@@ -126,4 +128,17 @@ type Msg interface {
 
 	EventID() int64
 	SessionStatus() string
+}
+
+//-----------------------------------------------------------------------------
+// MsgIDMap interface
+//-----------------------------------------------------------------------------
+
+// MsgIDMap is our interface to represent an incoming or outgoing message
+type MsgIDMap interface {
+	ID() MsgID
+	GatewayID() string
+	CarrierID() string
+	ChannelID() ChannelID
+	Logs()      string
 }

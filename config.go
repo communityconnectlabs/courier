@@ -12,6 +12,7 @@ type Config struct {
 	DB                        string `help:"URL describing how to connect to the RapidPro database"`
 	Redis                     string `help:"URL describing how to connect to Redis"`
 	SpoolDir                  string `help:"the local directory where courier will write statuses or msgs that need to be retried (needs to be writable)"`
+	S3PublicAccessEndpoint    string `help:"the public endpoint that can be used to get the private files"`
 	S3Endpoint                string `help:"the S3 endpoint we will write attachments to"`
 	S3Region                  string `help:"the S3 region we will write attachments to"`
 	S3MediaBucket             string `help:"the S3 bucket we will write attachments to"`
@@ -29,6 +30,9 @@ type Config struct {
 	StatusPassword            string `help:"the password that is needed to authenticate against the /status endpoint"`
 	LogLevel                  string `help:"the logging level courier should use"`
 	Version                   string `help:"the version that will be used in request and response headers"`
+	WebChatServerSecret       string `help:"key for encoding the websocket tokens"`
+	SMPPServerEndpoint        string `help:"the URL of the server that handles SMPP connections"`
+	SMPPServerToken           string `help:"the token of the server that handles SMPP connections"`
 
 	// IncludeChannels is the list of channels to enable, empty means include all
 	IncludeChannels []string
@@ -47,6 +51,7 @@ func NewConfig() *Config {
 		DB:                        "postgres://temba:temba@localhost/temba?sslmode=disable",
 		Redis:                     "redis://localhost:6379/15",
 		SpoolDir:                  "/var/spool/courier",
+		S3PublicAccessEndpoint:    "http://localhost:8000/storage",
 		S3Endpoint:                "https://s3.amazonaws.com",
 		S3Region:                  "us-east-1",
 		S3MediaBucket:             "courier-media",
@@ -60,6 +65,9 @@ func NewConfig() *Config {
 		MaxWorkers:                32,
 		LogLevel:                  "error",
 		Version:                   "Dev",
+		WebChatServerSecret:       "",
+		SMPPServerEndpoint:        "",
+		SMPPServerToken:           "",
 	}
 }
 

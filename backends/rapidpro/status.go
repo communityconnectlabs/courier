@@ -19,11 +19,14 @@ import (
 
 // newMsgStatus creates a new DBMsgStatus for the passed in parameters
 func newMsgStatus(channel courier.Channel, id courier.MsgID, externalID string, status courier.MsgStatusValue) *DBMsgStatus {
-	dbChannel := channel.(*DBChannel)
+	var channelID = courier.NilChannelID
+	if dbChannel, ok := channel.(*DBChannel); ok {
+		channelID = dbChannel.ID()
+	}
 
 	return &DBMsgStatus{
 		ChannelUUID_: channel.UUID(),
-		ChannelID_:   dbChannel.ID(),
+		ChannelID_:   channelID,
 		ID_:          id,
 		OldURN_:      urns.NilURN,
 		NewURN_:      urns.NilURN,
@@ -318,6 +321,8 @@ type DBMsgStatus struct {
 	OldURN_      urns.URN               `json:"old_urn"                  db:"old_urn"`
 	NewURN_      urns.URN               `json:"new_urn"                  db:"new_urn"`
 	ExternalID_  string                 `json:"external_id,omitempty"    db:"external_id"`
+	GatewayID_   string                 `json:"gateway_id,omitempty"     db:"gateway_id"`
+	CarrierID_   string                 `json:"carrier_id,omitempty"     db:"carrier_id"`
 	Status_      courier.MsgStatusValue `json:"status"                   db:"status"`
 	ModifiedOn_  time.Time              `json:"modified_on"              db:"modified_on"`
 
@@ -326,6 +331,7 @@ type DBMsgStatus struct {
 
 func (s *DBMsgStatus) EventID() int64 { return int64(s.ID_) }
 
+func (s *DBMsgStatus) ChannelID() courier.ChannelID     { return s.ChannelID_ }
 func (s *DBMsgStatus) ChannelUUID() courier.ChannelUUID { return s.ChannelUUID_ }
 func (s *DBMsgStatus) ID() courier.MsgID                { return s.ID_ }
 
@@ -367,6 +373,11 @@ func (s *DBMsgStatus) HasUpdatedURN() bool {
 
 func (s *DBMsgStatus) ExternalID() string      { return s.ExternalID_ }
 func (s *DBMsgStatus) SetExternalID(id string) { s.ExternalID_ = id }
+
+func (s *DBMsgStatus) GatewayID() string      { return s.GatewayID_ }
+func (s *DBMsgStatus) SetGatewayID(id string) { s.GatewayID_ = id }
+func (s *DBMsgStatus) CarrierID() string      { return s.CarrierID_ }
+func (s *DBMsgStatus) SetCarrierID(id string) { s.CarrierID_ = id }
 
 func (s *DBMsgStatus) Logs() []*courier.ChannelLog    { return s.logs }
 func (s *DBMsgStatus) AddLog(log *courier.ChannelLog) { s.logs = append(s.logs, log) }

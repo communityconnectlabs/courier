@@ -50,7 +50,8 @@ For writing of message attachments, Courier needs access to an S3 bucket, you ca
  * `COURIER_S3_MEDIA_BUCKET`: The name of your S3 bucket (ex: `dl-courier`)
  * `COURIER_S3_MEDIA_PREFIX`: The prefix to use for filenames of attachments added to your bucket (ex: `attachments`)
  * `COURIER_AWS_ACCESS_KEY_ID`: The AWS access key id used to authenticate to AWS
- * `COURIER_AWS_SECRET_ACCESS_KEY` The AWS secret access key used to authenticate to AWS
+ * `COURIER_AWS_SECRET_ACCESS_KEY`: The AWS secret access key used to authenticate to AWS
+ * `COURIER_S3_PUBLIC_ACCESS_ENDPOINT`: The URL than can be used to get access to private storage files
 
 Recommended settings for error and performance monitoring:
 

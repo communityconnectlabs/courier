@@ -24,11 +24,13 @@ import (
 
 // MockBackend is a mocked version of a backend which doesn't require a real database or cache
 type MockBackend struct {
-	channels          map[ChannelUUID]Channel
-	channelsByAddress map[ChannelAddress]Channel
-	contacts          map[urns.URN]Contact
-	queueMsgs         []Msg
-	errorOnQueue      bool
+	channels           map[ChannelUUID]Channel
+	channelsByAddress  map[ChannelAddress]Channel
+	channelsByMsgID    map[MsgID]Channel
+	channelsByExtMsgID map[string]Channel
+	contacts           map[urns.URN]Contact
+	queueMsgs          []Msg
+	errorOnQueue       bool
 
 	mutex           sync.RWMutex
 	outgoingMsgs    []Msg
@@ -124,8 +126,13 @@ func (mb *MockBackend) NewIncomingMsg(channel Channel, urn urns.URN, text string
 }
 
 // NewOutgoingMsg creates a new outgoing message from the given params
-func (mb *MockBackend) NewOutgoingMsg(channel Channel, id MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToExternalID string) Msg {
-	return &mockMsg{channel: channel, id: id, urn: urn, text: text, highPriority: highPriority, quickReplies: quickReplies, topic: topic, responseToExternalID: responseToExternalID}
+func (mb *MockBackend) NewOutgoingMsg(channel Channel, id MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToID int64, responseToExternalID string) Msg {
+	msgResponseToID := NilMsgID
+	if responseToID != 0 {
+		msgResponseToID = NewMsgID(responseToID)
+	}
+
+	return &mockMsg{channel: channel, id: id, urn: urn, text: text, highPriority: highPriority, quickReplies: quickReplies, topic: topic, responseToID: msgResponseToID, responseToExternalID: responseToExternalID}
 }
 
 // PushOutgoingMsg is a test method to add a message to our queue of messages to send
@@ -164,6 +171,11 @@ func (mb *MockBackend) ClearMsgSent(ctx context.Context, id MsgID) error {
 
 	delete(mb.sentMsgs, id)
 	return nil
+}
+
+// IsMsgLoop returns whether the passed in msg is a loop
+func (mb *MockBackend) IsMsgLoop(ctx context.Context, msg Msg) (bool, error) {
+	return false, nil
 }
 
 // MarkOutgoingMsgComplete marks the passed msg as having been dealt with
@@ -274,6 +286,23 @@ func (mb *MockBackend) GetChannelByAddress(ctx context.Context, cType ChannelTyp
 	return channel, nil
 }
 
+// GetChannelByAddress returns the channel with the passed in type and channel address
+func (mb *MockBackend) GetMsgChannel(ctx context.Context, ct ChannelType, msgID MsgID, externalID string) (Channel, error) {
+	if msgID != NilMsgID {
+		channel, found := mb.channelsByMsgID[msgID]
+		if !found {
+			return nil, ErrChannelNotFound
+		}
+		return channel, nil
+	} else {
+		channel, found := mb.channelsByExtMsgID[externalID]
+		if !found {
+			return nil, ErrChannelNotFound
+		}
+		return channel, nil
+	}
+}
+
 // GetContact creates a new contact with the passed in channel and URN
 func (mb *MockBackend) GetContact(ctx context.Context, channel Channel, urn urns.URN, auth string, name string) (Contact, error) {
 	contact, found := mb.contacts[urn]
@@ -298,6 +327,11 @@ func (mb *MockBackend) RemoveURNfromContact(context context.Context, channel Cha
 		delete(mb.contacts, urn)
 	}
 	return urn, nil
+}
+
+// AddLanguageToContact adds a URN to the passed in contact
+func (mb *MockBackend) AddLanguageToContact(ctx context.Context, channel Channel, language string, contact Contact) (Contact, error) {
+	return contact, nil
 }
 
 // AddChannel adds a test channel to the test server
@@ -372,6 +406,30 @@ func (mb *MockBackend) Heartbeat() error {
 // RedisPool returns the redisPool for this backend
 func (mb *MockBackend) RedisPool() *redis.Pool {
 	return mb.redisPool
+}
+
+func (mb *MockBackend) NewMsgAttachmentForExternalID(channel Channel, s string, s2 string) (MsgAttachment, error) {
+	return nil, nil
+}
+
+func (mb *MockBackend) WriteMsgAttachment(ctx context.Context, channel Channel, attachment *MsgAttachment) error {
+	return nil
+}
+
+func (mb *MockBackend) GetContactMessages(channel Channel, contact Contact) ([]Msg, error) {
+	return nil, nil
+}
+
+type mockMsgIDMap struct{}
+
+func (m mockMsgIDMap) ID() MsgID            { return NilMsgID }
+func (m mockMsgIDMap) GatewayID() string    { return "" }
+func (m mockMsgIDMap) CarrierID() string    { return "" }
+func (m mockMsgIDMap) ChannelID() ChannelID { return NilChannelID }
+func (m mockMsgIDMap) Logs() string         { return "" }
+
+func (mb *MockBackend) GetMsgIDByExternalID(ctx context.Context, externalID string) (MsgIDMap, error) {
+	return &mockMsgIDMap{}, nil
 }
 
 func buildMockBackend(config *Config) Backend {
@@ -563,10 +621,13 @@ type mockMsg struct {
 	highPriority         bool
 	quickReplies         []string
 	topic                string
+	responseToID         MsgID
 	responseToExternalID string
 	metadata             json.RawMessage
 	alreadyWritten       bool
 	isResend             bool
+	receiveAttachment    string
+	sharingConfig        json.RawMessage
 
 	flow *FlowReference
 
@@ -606,9 +667,12 @@ func (m *mockMsg) ContactName() string          { return m.contactName }
 func (m *mockMsg) HighPriority() bool           { return m.highPriority }
 func (m *mockMsg) QuickReplies() []string       { return m.quickReplies }
 func (m *mockMsg) Topic() string                { return m.topic }
+func (m *mockMsg) ResponseToID() MsgID            { return m.responseToID }
 func (m *mockMsg) ResponseToExternalID() string { return m.responseToExternalID }
 func (m *mockMsg) Metadata() json.RawMessage    { return m.metadata }
 func (m *mockMsg) IsResend() bool               { return m.isResend }
+func (m *mockMsg) ReceiveAttachment() string      { return m.receiveAttachment }
+func (m *mockMsg) SharingConfig() json.RawMessage { return m.sharingConfig }
 
 func (m *mockMsg) ReceivedOn() *time.Time { return m.receivedOn }
 func (m *mockMsg) SentOn() *time.Time     { return m.sentOn }
@@ -638,15 +702,24 @@ type mockMsgStatus struct {
 	oldURN     urns.URN
 	newURN     urns.URN
 	externalID string
+	gatewayID  string
+	carrierID  string
 	status     MsgStatusValue
 	createdOn  time.Time
 
 	logs []*ChannelLog
 }
 
-func (m *mockMsgStatus) ChannelUUID() ChannelUUID { return m.channel.UUID() }
-func (m *mockMsgStatus) ID() MsgID                { return m.id }
-func (m *mockMsgStatus) EventID() int64           { return int64(m.id) }
+func (m *mockMsgStatus) ChannelID() ChannelID { return NilChannelID }
+func (m *mockMsgStatus) ChannelUUID() ChannelUUID {
+	if m.channel != nil {
+		return m.channel.UUID()
+	} else {
+		return NilChannelUUID
+	}
+}
+func (m *mockMsgStatus) ID() MsgID      { return m.id }
+func (m *mockMsgStatus) EventID() int64 { return int64(m.id) }
 
 func (m *mockMsgStatus) SetUpdatedURN(old, new urns.URN) error {
 	m.oldURN = old
@@ -665,6 +738,11 @@ func (m *mockMsgStatus) HasUpdatedURN() bool {
 
 func (m *mockMsgStatus) ExternalID() string      { return m.externalID }
 func (m *mockMsgStatus) SetExternalID(id string) { m.externalID = id }
+
+func (s *mockMsgStatus) GatewayID() string      { return s.gatewayID }
+func (s *mockMsgStatus) SetGatewayID(id string) { s.gatewayID = id }
+func (s *mockMsgStatus) CarrierID() string      { return s.carrierID }
+func (s *mockMsgStatus) SetCarrierID(id string) { s.carrierID = id }
 
 func (m *mockMsgStatus) Status() MsgStatusValue          { return m.status }
 func (m *mockMsgStatus) SetStatus(status MsgStatusValue) { m.status = status }

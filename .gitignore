@@ -35,4 +35,8 @@ _testmain.go
 dist/
 .envrc
 courier
+courier.toml
+
+.idea/
 _storage
+coverage.text

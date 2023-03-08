@@ -87,9 +87,11 @@ type ChannelSendTestCase struct {
 	QuickReplies         []string
 	Topic                string
 	HighPriority         bool
+	ResponseToID         int64
 	ResponseToExternalID string
 	Metadata             json.RawMessage
-	Flow                 *courier.FlowReference
+	ReceiveAttachment    string
+	SharingConfig        json.RawMessage
 
 	ResponseStatus int
 	ResponseBody   string
@@ -207,12 +209,16 @@ func newServer(backend courier.Backend) courier.Server {
 }
 
 // RunChannelSendTestCases runs all the passed in test cases against the channel
-func RunChannelSendTestCases(t *testing.T, channel courier.Channel, handler courier.ChannelHandler, testCases []ChannelSendTestCase, setupBackend func(*courier.MockBackend)) {
-	mb := courier.NewMockBackend()
-	if setupBackend != nil {
-		setupBackend(mb)
+func RunChannelSendTestCases(t *testing.T, channel courier.Channel, handler courier.ChannelHandler, testCases []ChannelSendTestCase, setupBackendAndServer func() (*courier.MockBackend, courier.Server)) {
+	var s courier.Server
+	var mb *courier.MockBackend
+	if setupBackendAndServer != nil {
+		mb, s = setupBackendAndServer()
+	} else {
+		mb = courier.NewMockBackend()
+		s = newServer(mb)
 	}
-	s := newServer(mb)
+
 	mb.AddChannel(channel)
 	handler.Initialize(s)
 
@@ -221,7 +227,7 @@ func RunChannelSendTestCases(t *testing.T, channel courier.Channel, handler cour
 		t.Run(testCase.Label, func(t *testing.T) {
 			require := require.New(t)
 
-			msg := mb.NewOutgoingMsg(channel, courier.NewMsgID(10), urns.URN(testCase.URN), testCase.Text, testCase.HighPriority, testCase.QuickReplies, testCase.Topic, testCase.ResponseToExternalID)
+			msg := mb.NewOutgoingMsg(channel, courier.NewMsgID(10), urns.URN(testCase.URN), testCase.Text, testCase.HighPriority, testCase.QuickReplies, testCase.Topic, testCase.ResponseToID, testCase.ResponseToExternalID)
 
 			for _, a := range testCase.Attachments {
 				msg.WithAttachment(a)

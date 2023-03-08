@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -267,6 +268,162 @@ func clearLocalChannelByAddress(address courier.ChannelAddress) {
 
 var cacheByAddressMutex sync.RWMutex
 var channelByAddressCache = make(map[courier.ChannelAddress]*DBChannel)
+
+// getChannelByMsg will look up the channel with the passed in msg ids and channel type.
+// It will return an error if the channel does not exist or is not active.
+func getChannelByMsg(ctx context.Context, db *sqlx.DB, channelType courier.ChannelType, msgID courier.MsgID, externalID string) (*DBChannel, error) {
+	// look for the channel locally
+	cachedChannel, localErr := getCachedChannelByMsg(channelType, msgID, externalID)
+
+	// found it? return it
+	if localErr == nil {
+		return cachedChannel, nil
+	}
+
+	// look in our database instead
+	channel, dbErr := loadChannelByMsgsFromDB(ctx, db, channelType, msgID, externalID)
+
+	// if it wasn't found in the DB, clear our cache and return that it wasn't found
+	if dbErr == courier.ErrChannelNotFound {
+		clearLocalChannelByMsg(msgID, externalID)
+		return cachedChannel, errors.Wrap(dbErr, fmt.Sprintf("unable to find channel with type: %s and MsgID: %s and MsgExternalID: %s", channelType.String(), msgID.String(), externalID))
+	}
+
+	// if we had some other db error, return it if our cached channel was only just expired
+	if dbErr != nil && localErr == courier.ErrChannelExpired {
+		return cachedChannel, nil
+	}
+
+	// no cached channel, oh well, we fail
+	if dbErr != nil {
+		return nil, dbErr
+	}
+
+	// we found it in the db, cache it locally
+	cacheChannel(channel)
+	return channel, nil
+}
+
+const lookupChannelFromMsgSQL = `
+SELECT
+       ch.org_id as org_id,
+       ch.id as id,
+       ch.uuid as uuid,
+       ch.name as name,
+       channel_type, schemes,
+       address,
+       ch.country as country,
+       ch.config as config,
+       org.config as org_config,
+       org.is_anon as org_is_anon
+FROM
+       channels_channel ch
+       JOIN orgs_org org ON ch.org_id = org.id
+	   JOIN msgs_msg msg ON ch.id = msg.channel_id
+       LEFT JOIN msgs_messageexternalidmap msg_ids ON msg.id = msg_ids.message_id
+WHERE
+       ((msg.id = $1) OR ($2 <> '' AND (msg_ids.carrier_id = $2 OR msg_ids.gateway_id = $2))) AND
+       ch.is_active = true AND
+       ch.org_id IS NOT NULL
+LIMIT 1`
+
+// loadChannelByAddressFromDB get the channel with the passed in channel type and address from the DB, returning it
+func loadChannelByMsgsFromDB(ctx context.Context, db *sqlx.DB, channelType courier.ChannelType, msgID courier.MsgID, externalID string) (*DBChannel, error) {
+	channel := &DBChannel{}
+
+	// select just the fields we need
+	err := db.GetContext(ctx, channel, lookupChannelFromMsgSQL, msgID, externalID)
+
+	// we didn't find a match
+	if err == sql.ErrNoRows {
+		return nil, courier.ErrChannelNotFound
+	}
+
+	// other error
+	if err != nil {
+		return nil, err
+	}
+
+	// is it the right type?
+	if channelType != courier.AnyChannelType && channelType != channel.ChannelType() {
+		return nil, courier.ErrChannelWrongType
+	}
+
+	// found it, return it
+	return channel, nil
+}
+
+// getCachedChannelByMsg returns a Channel object for the passed in Msg ids.
+func getCachedChannelByMsg(channelType courier.ChannelType, msgID courier.MsgID, externalID string) (*DBChannel, error) {
+	// first see if the channel exists in our local cache
+	cacheByMsgMutex.RLock()
+	channel, found := (*DBChannel)(nil), false
+	if msgID != courier.NilMsgID {
+		channel, found = channelByMsgIDCache[msgID]
+	} else if externalID != "" {
+		channel, found = channelByMsgGatewayIDCache[externalID]
+		if !found {
+			channel, found = channelByMsgCarrierIDCache[externalID]
+		}
+	}
+	cacheByMsgMutex.RUnlock()
+
+	// do not consider the cache for empty addresses
+	if found && (msgID != courier.NilMsgID || externalID != "") {
+		// if it was found but the type is wrong, that's an error
+		if channelType != courier.AnyChannelType && channel.ChannelType() != channelType {
+			return nil, courier.ErrChannelWrongType
+		}
+
+		// if we've expired, we return it with an error
+		if channel.expiration.Before(time.Now()) {
+			return channel, courier.ErrChannelExpired
+		}
+
+		return channel, nil
+	}
+
+	return nil, courier.ErrChannelNotFound
+}
+
+func RefreshSMPPChannelCache(msgID courier.MsgID, gatewayID string, carrierID string)  {
+	cacheByAddressMutex.Lock()
+	if msgID != courier.NilMsgID && gatewayID != "" {
+		channel, found := channelByMsgIDCache[msgID]
+		if found && gatewayID != "" {
+			channelByMsgGatewayIDCache[gatewayID] = channel
+		}
+	}
+
+	if gatewayID != "" && carrierID != "" {
+		channel, found := channelByMsgGatewayIDCache[gatewayID]
+		if found && carrierID != "" {
+			channelByMsgCarrierIDCache[carrierID] = channel
+		}
+	}
+	cacheByAddressMutex.Unlock()
+}
+
+func clearLocalChannelByMsg(msgID courier.MsgID, externalID string) {
+	cacheByAddressMutex.Lock()
+	if msgID != courier.NilMsgID {
+		delete(channelByMsgIDCache, msgID)
+	}
+	if externalID != "" {
+		if _, ok := channelByMsgGatewayIDCache[externalID]; ok {
+			delete(channelByMsgGatewayIDCache, externalID)
+		}
+		if _, ok := channelByMsgCarrierIDCache[externalID]; ok {
+			delete(channelByMsgCarrierIDCache, externalID)
+		}
+	}
+	cacheByAddressMutex.Unlock()
+}
+
+var cacheByMsgMutex sync.RWMutex
+var channelByMsgIDCache = make(map[courier.MsgID]*DBChannel)
+var channelByMsgGatewayIDCache = make(map[string]*DBChannel)
+var channelByMsgCarrierIDCache = make(map[string]*DBChannel)
 
 //-----------------------------------------------------------------------------
 // Channel Implementation
