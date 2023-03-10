@@ -2,7 +2,7 @@ module github.com/nyaruka/courier
 
 go 1.17
 
-replace github.com/nyaruka/gocommon => github.com/greatnonprofits-nfp/gocommon v1.14.3
+replace github.com/nyaruka/gocommon => github.com/greatnonprofits-nfp/gocommon v1.17.2
 
 require (
 	github.com/antchfx/xmlquery v0.0.0-20181223105952-355641961c92
@@ -25,14 +25,13 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348 // indirect
 	github.com/lib/pq v1.10.4
-	github.com/mattn/go-sqlite3 v1.10.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/nyaruka/ezconf v0.2.1
 	github.com/nyaruka/gocommon v1.17.1
 	github.com/nyaruka/librato v1.0.0
 	github.com/nyaruka/null v1.1.1
-	github.com/nyaruka/redisx v0.2.1
 	github.com/nyaruka/phonenumbers v1.0.71
+	github.com/nyaruka/redisx v0.2.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.4.2
@@ -57,6 +56,5 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
 	golang.org/x/sys v0.0.0-20210423082822-04245dca01da // indirect
-    golang.org/x/text v0.3.6 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )

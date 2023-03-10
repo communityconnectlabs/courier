@@ -151,7 +151,7 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 	if len(channel.Address()) <= 6 && utils.CheckOptOutKeywordPresence(msg.Text()) {
 		textMessage := channel.OrgConfigForKey(utils.OptOutMessageBackKey, utils.OptOutDefaultMessageBack)
 		msgBack := h.Backend().NewOutgoingMsg(
-			channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", 0, "",
+			channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", "",
 		)
 		_, err := h.SendMsg(ctx, msgBack)
 		if err != nil {

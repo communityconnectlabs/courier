@@ -54,7 +54,7 @@ type Backend interface {
 	NewIncomingMsg(channel Channel, urn urns.URN, text string) Msg
 
 	// NewOutgoingMsg creates a new outgoing message from the given params
-	NewOutgoingMsg(channel Channel, id MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToID int64, responseToExternalID string) Msg
+	NewOutgoingMsg(channel Channel, id MsgID, urn urns.URN, text string, highPriority bool, quickReplies []string, topic string, responseToExternalID string) Msg
 
 	// WriteMsg writes the passed in message to our backend
 	WriteMsg(context.Context, Msg) error
@@ -97,10 +97,6 @@ type Backend interface {
 	// ClearMsgSent clears any internal status that a message was previously sent. This can be used in the case where
 	// a message is being forced in being resent by a user
 	ClearMsgSent(context.Context, MsgID) error
-
-	// IsMsgLoop returns whether the passed in message is part of a message loop, possibly with another bot. Backends should
-	// implement their own logic to implement this.
-	IsMsgLoop(ctx context.Context, msg Msg) (bool, error)
 
 	// MarkOutgoingMsgComplete marks the passed in message as having been processed. Note this should be called even in the case
 	// of errors during sending as it will manage the number of active workers per channel. The optional status parameter can be
