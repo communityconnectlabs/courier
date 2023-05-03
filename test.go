@@ -187,6 +187,10 @@ func (mb *MockBackend) WriteChannelLogs(ctx context.Context, logs []*ChannelLog)
 	return nil
 }
 
+func (mb *MockBackend) WriteSMPPLog(ctx context.Context, smppLog *SMPPLog) error {
+	return nil
+}
+
 // SetErrorOnQueue is a mock method which makes the QueueMsg call throw the passed in error on next call
 func (mb *MockBackend) SetErrorOnQueue(shouldError bool) {
 	mb.errorOnQueue = shouldError

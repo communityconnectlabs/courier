@@ -509,6 +509,18 @@ func (b *backend) WriteChannelLogs(ctx context.Context, logs []*courier.ChannelL
 	return nil
 }
 
+// WriteSMPPLog persists the passed SMPP log to our database
+func (b *backend) WriteSMPPLog(ctx context.Context, log *courier.SMPPLog) error {
+	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
+	defer cancel()
+
+	err := writeSMPPLog(timeout, b, log)
+	if err != nil {
+		logrus.WithError(err).Error("error writing channel log")
+	}
+	return nil
+}
+
 // Check if external ID has been seen in a period
 func (b *backend) CheckExternalIDSeen(msg courier.Msg) courier.Msg {
 	var prevUUID = checkExternalIDSeen(b, msg)

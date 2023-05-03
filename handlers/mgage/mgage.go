@@ -206,7 +206,7 @@ func (h *handler) receiveStatus(ctx context.Context, channel courier.Channel, w 
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "no msg status, ignoring")
 		}
 		msgIDMap, err := h.Backend().GetMsgIDByExternalID(ctx, payload.MsgRef)
-		if err == sql.ErrNoRows || (msgIDMap != nil && msgIDMap.ID() == courier.NilMsgID)  {
+		if err == sql.ErrNoRows || (msgIDMap != nil && msgIDMap.ID() == courier.NilMsgID) {
 			// save channel logs if exact channel can't be defined at the moment
 			status = h.Backend().NewMsgStatusForExternalID(channel, payload.MsgRef, courier.MsgDelivered)
 			status.SetCarrierID(payload.MsgRef)

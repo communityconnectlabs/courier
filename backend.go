@@ -120,6 +120,9 @@ type Backend interface {
 
 	// RedisPool returns the redisPool for this backend
 	RedisPool() *redis.Pool
+
+	// WriteSMPPLog write the SMPP channel logs to our backend
+	WriteSMPPLog(context.Context, *SMPPLog) error
 }
 
 // NewBackend creates the type of backend passed in
