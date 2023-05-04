@@ -39,7 +39,7 @@ func (h *handler) Initialize(s courier.Server) error {
 	return nil
 }
 
-func (h *handler) SendMsg(_ context.Context, msg courier.Msg) (courier.MsgStatus, error) {
+func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStatus, error) {
 	if msg.URN().Scheme() != urns.TelScheme {
 		return nil, fmt.Errorf("wrong urn scheme for the current mGage channel type")
 	}
@@ -50,8 +50,9 @@ func (h *handler) SendMsg(_ context.Context, msg courier.Msg) (courier.MsgStatus
 		msgEncoding = UCS2
 	}
 
+	status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
+
 	if h.shouldSplit(msg.Text(), msgEncoding) {
-		status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
 		parts := h.encodeSplit(msg.Text(), msgEncoding)
 		partsLength := len(parts)
 		for index, part := range parts {
@@ -68,12 +69,19 @@ func (h *handler) SendMsg(_ context.Context, msg courier.Msg) (courier.MsgStatus
 
 			rr, err := h.sendToSMPP(payload)
 			log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
+
 			if err != nil {
 				status.SetStatus(courier.MsgFailed)
+				_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+					ChannelID: msg.Channel().ID(),
+					MsgID:     msg.ID(),
+					Status:    courier.MsgFailed,
+					CreatedOn: time.Now(),
+				})
 			}
+
 			status.AddLog(log)
 		}
-		return status, nil
 	} else {
 		msgID, _ := strconv.Atoi(msg.ID().String())
 		payload := &moPayload{
@@ -85,15 +93,31 @@ func (h *handler) SendMsg(_ context.Context, msg courier.Msg) (courier.MsgStatus
 			PartNum:  1,
 			Parts:    1,
 		}
+
 		rr, err := h.sendToSMPP(payload)
-		status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
 		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
+
 		if err != nil {
 			status.SetStatus(courier.MsgFailed)
+			_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+				ChannelID: msg.Channel().ID(),
+				MsgID:     msg.ID(),
+				Status:    courier.MsgFailed,
+				CreatedOn: time.Now(),
+			})
 		}
+
 		status.AddLog(log)
-		return status, nil
 	}
+
+	_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+		ChannelID: msg.Channel().ID(),
+		MsgID:     msg.ID(),
+		Status:    courier.MsgWired,
+		CreatedOn: time.Now(),
+	})
+
+	return status, nil
 }
 
 // GetChannel returns the channel

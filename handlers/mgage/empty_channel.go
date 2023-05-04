@@ -4,6 +4,7 @@ import "github.com/nyaruka/courier"
 
 type EmptyMGAChannel struct{}
 
+func (e EmptyMGAChannel) ID() courier.ChannelID                  { return courier.NilChannelID }
 func (e EmptyMGAChannel) UUID() courier.ChannelUUID              { return courier.NilChannelUUID }
 func (e EmptyMGAChannel) Name() string                           { return "" }
 func (e EmptyMGAChannel) ChannelType() courier.ChannelType       { return "MGA" }

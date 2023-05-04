@@ -440,6 +440,7 @@ func init() {
 
 // MockChannel implements the Channel interface and is used in our tests
 type MockChannel struct {
+	id          ChannelID
 	uuid        ChannelUUID
 	channelType ChannelType
 	schemes     []string
@@ -449,6 +450,9 @@ type MockChannel struct {
 	config      map[string]interface{}
 	orgConfig   map[string]interface{}
 }
+
+// ID returns the id for this channel
+func (c *MockChannel) ID() ChannelID { return c.id }
 
 // UUID returns the uuid for this channel
 func (c *MockChannel) UUID() ChannelUUID { return c.uuid }
