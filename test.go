@@ -37,6 +37,7 @@ type MockBackend struct {
 	msgStatuses     []MsgStatus
 	channelEvents   []ChannelEvent
 	channelLogs     []*ChannelLog
+	channelSMPPLogs []*SMPPLog
 	lastContactName string
 
 	sentMsgs  map[MsgID]bool
@@ -188,6 +189,11 @@ func (mb *MockBackend) WriteChannelLogs(ctx context.Context, logs []*ChannelLog)
 }
 
 func (mb *MockBackend) WriteSMPPLog(ctx context.Context, smppLog *SMPPLog) error {
+	mb.mutex.Lock()
+	defer mb.mutex.Unlock()
+
+	mb.channelSMPPLogs = append(mb.channelSMPPLogs, smppLog)
+
 	return nil
 }
 
