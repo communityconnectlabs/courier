@@ -72,3 +72,19 @@ func writeChannelLog(ctx context.Context, b *backend, log *courier.ChannelLog) e
 	b.logCommitter.Queue(v)
 	return nil
 }
+
+const insertSMPPLogSQL = `
+INSERT INTO
+    channels_smpplog("status", "channel_id", "msg_id", "created_on")
+			  VALUES(:status,  :channel_id,  :msg_id,  :created_on)
+`
+
+func writeSMPPLog(ctx context.Context, b *backend, log *courier.SMPPLog) error {
+	rows, err := b.db.NamedQueryContext(ctx, insertSMPPLogSQL, log)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	return nil
+}

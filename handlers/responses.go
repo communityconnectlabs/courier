@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/nyaruka/courier"
 )
@@ -25,6 +26,16 @@ func WriteMsgsAndResponse(ctx context.Context, h ResponseWriter, msgs []courier.
 			return nil, err
 		}
 		events[i] = m
+
+		if m.Channel().ChannelType().String() == "MGA" {
+			_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+				ChannelID: m.Channel().ID(),
+				MsgID:     m.ID(),
+				Status:    courier.MsgHandled,
+				CreatedOn: time.Now(),
+			})
+		}
+
 	}
 
 	return events, h.WriteMsgSuccessResponse(ctx, w, r, msgs)
@@ -51,6 +62,15 @@ func WriteMsgStatusAndResponse(ctx context.Context, h ResponseWriter, channel co
 
 	if err != nil {
 		return nil, err
+	}
+
+	if channel.ChannelType().String() == "MGA" {
+		_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+			ChannelID: status.ChannelID(),
+			MsgID:     status.ID(),
+			Status:    status.Status(),
+			CreatedOn: time.Now(),
+		})
 	}
 
 	return []courier.Event{status}, h.WriteStatusSuccessResponse(ctx, w, r, []courier.MsgStatus{status})

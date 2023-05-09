@@ -114,3 +114,11 @@ type ChannelLog struct {
 	Elapsed     time.Duration `json:"elapsed"`
 	CreatedOn   time.Time     `json:"created_on"`
 }
+
+// SMPPLog represents the log for an SMPP SMS being received, sent or having its status updated.
+type SMPPLog struct {
+	ChannelID ChannelID      `json:"channel_id" db:"channel_id"`
+	MsgID     MsgID          `json:"msg_id" db:"msg_id"`
+	Status    MsgStatusValue `json:"status" db:"status"`
+	CreatedOn time.Time      `json:"created_on" db:"created_on"`
+}

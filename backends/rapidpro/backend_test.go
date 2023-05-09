@@ -971,6 +971,21 @@ func (ts *BackendTestSuite) TestChanneLog() {
 	ts.NoError(err)
 }
 
+func (ts *BackendTestSuite) TestSMPPLog() {
+	mgaChannel := ts.getChannel("MGA", "58b70770-b76c-40e6-8755-8abb65611839")
+	ctx := context.Background()
+
+	log := courier.SMPPLog{
+		ChannelID: mgaChannel.ID(),
+		MsgID:     courier.NilMsgID,
+		Status:    courier.MsgWired,
+		CreatedOn: time.Now(),
+	}
+
+	err := writeSMPPLog(ctx, ts.b, &log)
+	ts.NoError(err)
+}
+
 func (ts *BackendTestSuite) TestWriteAttachment() {
 	ctx := context.Background()
 

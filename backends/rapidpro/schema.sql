@@ -135,5 +135,14 @@ CREATE TABLE msgs_messageexternalidmap
     request_logs jsonb
 );
 
+DROP TABLE IF EXISTS channels_smpplog CASCADE;
+CREATE TABLE channels_smpplog (
+     id         serial not null primary key,
+     status     character varying(1) NOT NULL,
+     created_on timestamp with time zone NOT NULL,
+     channel_id integer NOT NULL,
+     msg_id     bigint
+);
+
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO courier;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO courier;

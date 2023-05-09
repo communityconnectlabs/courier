@@ -13,6 +13,7 @@ const (
 	MsgWired     MsgStatusValue = "W"
 	MsgEnroute   MsgStatusValue = "U"
 	MsgErrored   MsgStatusValue = "E"
+	MsgHandled   MsgStatusValue = "H"
 	MsgDelivered MsgStatusValue = "D"
 	MsgFailed    MsgStatusValue = "F"
 	NilMsgStatus MsgStatusValue = ""
@@ -26,7 +27,7 @@ const (
 type MsgStatus interface {
 	EventID() int64
 
-	ChannelID()   ChannelID
+	ChannelID() ChannelID
 	ChannelUUID() ChannelUUID
 	ID() MsgID
 
@@ -38,9 +39,9 @@ type MsgStatus interface {
 	SetExternalID(string)
 
 	// required fields for SMPP
-	GatewayID() string  // External ID from mGage for tracking MsgStatus
+	GatewayID() string // External ID from mGage for tracking MsgStatus
 	SetGatewayID(string)
-	CarrierID() string  // External ID from service behind mGage for tracking MsgStatus
+	CarrierID() string // External ID from service behind mGage for tracking MsgStatus
 	SetCarrierID(string)
 
 	Status() MsgStatusValue
