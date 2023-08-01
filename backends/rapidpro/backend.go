@@ -300,7 +300,8 @@ func (b *backend) WriteMsg(ctx context.Context, m courier.Msg) error {
 	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
 	defer cancel()
 
-	if (m.Channel().ChannelType().String() == "T" || m.Channel().ChannelType().String() == "TMS") && len(m.Channel().Address()) <= 6 && utils.CheckOptOutKeywordPresence(m.Text()) {
+	if ((m.Channel().ChannelType().String() == "T" || m.Channel().ChannelType().String() == "TMS") && len(m.Channel().Address()) <= 6 && utils.CheckOptOutKeywordPresence(m.Text())) ||
+		(m.Channel().ChannelType().String() == "MGA" && utils.CheckOptOutKeywordPresence(m.Text())) {
 		event := b.NewChannelEvent(m.Channel(), courier.StopConversation, m.URN()).WithExtra(map[string]interface{}{
 			"opt_out_message":  m.Text(),
 			"opt_out_datetime": m.ReceivedOn(),
