@@ -47,6 +47,9 @@ type Backend interface {
 	// AddLanguageToContact adds a language to a contact
 	AddLanguageToContact(ctx context.Context, channel Channel, language string, contact Contact) (Contact, error)
 
+	// SetContactCustomField sets a contact custom field value
+	SetContactCustomField(ctx context.Context, contact Contact, fieldName string, value string) (ContactField, error)
+
 	// GetContactMessages load all messages by channel and contact
 	GetContactMessages(channel Channel, contact Contact) ([]Msg, error)
 

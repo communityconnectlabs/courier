@@ -132,6 +132,61 @@ func (b *backend) DeleteMsgWithExternalID(ctx context.Context, channel courier.C
 	return nil
 }
 
+const getOrgCustomField = `
+SELECT
+	uuid, key
+FROM
+    contacts_contactfield
+WHERE
+    org_id = $1 AND key = $2 AND is_active = true
+ORDER BY created_on DESC
+LIMIT 1;
+`
+
+const updateContactFieldsSQL = `
+UPDATE
+	contacts_contact c
+SET
+	fields = COALESCE(fields,'{}'::jsonb) || r.updates::jsonb
+FROM (
+	VALUES(:contact_id, :updates)
+) AS
+	r(contact_id, updates)
+WHERE
+	c.id = r.contact_id::int
+`
+
+// SetContactCustomField sets a contact custom field value
+func (b *backend) SetContactCustomField(ctx context.Context, contact courier.Contact, fieldName string, value string) (courier.ContactField, error) {
+	dbContact := contact.(*DBContact)
+	contactField := &DBContactField{}
+	err := b.db.GetContext(ctx, contactField, getOrgCustomField, dbContact.OrgID_, fieldName)
+	if err != nil {
+		return nil, err
+	}
+
+	updates := map[courier.ContactFieldUUID]string{contactField.UUID(): value}
+
+	// marshal the rest of our updates to JSON
+	fieldJSON, err := json.Marshal(updates)
+	if err != nil {
+		return contactField, err
+	}
+
+	fieldUpdates := make([]interface{}, 0)
+	fieldUpdates = append(fieldUpdates, &courier.FieldUpdate{
+		ContactID: dbContact.ID_,
+		Updates:   string(fieldJSON),
+	})
+
+	err = dbutil.BulkQuery(ctx, b.db, updateContactFieldsSQL, fieldUpdates)
+	if err != nil {
+		return contactField, err
+	}
+
+	return contactField, nil
+}
+
 const updateContactLang = `
 UPDATE
 	contacts_contact

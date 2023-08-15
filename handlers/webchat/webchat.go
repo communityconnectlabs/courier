@@ -87,6 +87,13 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errLang)
 	}
 
+	if payload.Extra != nil {
+		var extra map[string]interface{}
+		err = json.Unmarshal(payload.Extra, &extra)
+		//	Implement set custom field here
+		_, err = h.Backend().SetContactCustomField(ctx, contact, "email", extra["email"].(string))
+	}
+
 	// build our response
 	data = append(data, NewEventRegisteredContactData(contact.UUID(), userToken, urn.Path()))
 
@@ -300,9 +307,10 @@ func urnFromToken(tokenString string, secret string) (string, error) {
 }
 
 type userPayload struct {
-	URN       string `json:"urn"`
-	Language  string `json:"language"`
-	UserToken string `json:"user_token"`
+	URN       string          `json:"urn"`
+	Language  string          `json:"language"`
+	UserToken string          `json:"user_token"`
+	Extra     json.RawMessage `json:"extra,omitempty"`
 }
 
 type msgPayload struct {
