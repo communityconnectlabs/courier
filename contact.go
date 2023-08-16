@@ -1,7 +1,6 @@
 package courier
 
 import (
-	"github.com/nyaruka/courier/backends/rapidpro"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -41,10 +40,4 @@ type ContactFieldUUID struct {
 // ContactField defines the attributes on a contact field, for our purposes that is just a contact field UUID
 type ContactField interface {
 	UUID() ContactFieldUUID
-}
-
-// FieldUpdate defines the attributes on a contact field update
-type FieldUpdate struct {
-	ContactID rapidpro.ContactID `db:"contact_id"`
-	Updates   string             `db:"updates"`
 }

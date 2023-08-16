@@ -246,3 +246,9 @@ type DBContactField struct {
 
 // UUID returns the UUID for this contact
 func (c *DBContactField) UUID() courier.ContactFieldUUID { return c.UUID_ }
+
+// FieldUpdate defines the attributes on a contact field update
+type FieldUpdate struct {
+	ContactID ContactID `db:"contact_id"`
+	Updates   string    `db:"updates"`
+}

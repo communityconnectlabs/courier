@@ -165,7 +165,11 @@ func (b *backend) SetContactCustomField(ctx context.Context, contact courier.Con
 		return nil, err
 	}
 
-	updates := map[courier.ContactFieldUUID]string{contactField.UUID(): value}
+	updates := map[courier.ContactFieldUUID]interface{}{
+		contactField.UUID(): map[string]string{
+			"text": value,
+		},
+	}
 
 	// marshal the rest of our updates to JSON
 	fieldJSON, err := json.Marshal(updates)
@@ -174,7 +178,7 @@ func (b *backend) SetContactCustomField(ctx context.Context, contact courier.Con
 	}
 
 	fieldUpdates := make([]interface{}, 0)
-	fieldUpdates = append(fieldUpdates, &courier.FieldUpdate{
+	fieldUpdates = append(fieldUpdates, &FieldUpdate{
 		ContactID: dbContact.ID_,
 		Updates:   string(fieldJSON),
 	})
