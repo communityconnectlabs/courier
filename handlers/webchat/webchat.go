@@ -273,7 +273,7 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	hasError := true
 
 	// if we have text, send that if we aren't sending it as a caption
-	if msg.Text() != "" {
+	if msg.Text() != "" || len(msg.Attachments()) > 0 {
 		externalID, log, err := h.sendMsgPart(msg, address, data)
 		status.SetExternalID(externalID)
 		hasError = err != nil
