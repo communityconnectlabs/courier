@@ -334,6 +334,11 @@ func (mb *MockBackend) AddLanguageToContact(ctx context.Context, channel Channel
 	return contact, nil
 }
 
+func (mb *MockBackend) SetContactCustomField(ctx context.Context, contact Contact, fieldName string, value string) (ContactField, error) {
+	var contactField ContactField
+	return contactField, nil
+}
+
 // AddChannel adds a test channel to the test server
 func (mb *MockBackend) AddChannel(channel Channel) {
 	mb.channels[channel.UUID()] = channel

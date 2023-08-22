@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	. "github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/backends/rapidpro"
@@ -87,8 +88,19 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errLang)
 	}
 
+	responseErrors := make([]string, 0)
+	if payload.Extra != nil {
+		for fieldName, FieldValue := range payload.Extra {
+			sanitazedValue := fmt.Sprintf("%v", FieldValue)
+			_, err = h.Backend().SetContactCustomField(ctx, contact, fieldName, sanitazedValue)
+			if err != nil {
+				responseErrors = append(responseErrors, fmt.Sprintf("field %s not found on the org", fieldName))
+			}
+		}
+	}
+
 	// build our response
-	data = append(data, NewEventRegisteredContactData(contact.UUID(), userToken, urn.Path()))
+	data = append(data, NewEventRegisteredContactData(contact.UUID(), userToken, urn.Path(), responseErrors))
 
 	return nil, WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", data)
 }
@@ -261,7 +273,7 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	hasError := true
 
 	// if we have text, send that if we aren't sending it as a caption
-	if msg.Text() != "" {
+	if msg.Text() != "" || len(msg.Attachments()) > 0 {
 		externalID, log, err := h.sendMsgPart(msg, address, data)
 		status.SetExternalID(externalID)
 		hasError = err != nil
@@ -300,9 +312,10 @@ func urnFromToken(tokenString string, secret string) (string, error) {
 }
 
 type userPayload struct {
-	URN       string `json:"urn"`
-	Language  string `json:"language"`
-	UserToken string `json:"user_token"`
+	URN       string                 `json:"urn"`
+	Language  string                 `json:"language"`
+	UserToken string                 `json:"user_token"`
+	Extra     map[string]interface{} `json:"extra,omitempty"`
 }
 
 type msgPayload struct {
