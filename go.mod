@@ -2,7 +2,7 @@ module github.com/nyaruka/courier
 
 go 1.17
 
-replace github.com/nyaruka/gocommon => github.com/greatnonprofits-nfp/gocommon v1.17.2
+replace github.com/nyaruka/gocommon => github.com/communityconnectlabs/gocommon v1.17.2
 
 require (
 	github.com/antchfx/xmlquery v0.0.0-20181223105952-355641961c92
