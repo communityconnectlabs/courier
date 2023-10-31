@@ -21,6 +21,10 @@ import (
 	"mime"
 
 	"bytes"
+	"image"
+	"image/jpeg"
+	"image/png"
+
 	"github.com/gomodule/redigo/redis"
 	"github.com/lib/pq"
 	"github.com/nfnt/resize"
@@ -32,9 +36,6 @@ import (
 	"github.com/nyaruka/null"
 	"github.com/sirupsen/logrus"
 	filetype "gopkg.in/h2non/filetype.v1"
-	"image"
-	"image/jpeg"
-	"image/png"
 )
 
 // MsgDirection is the direction of a message
@@ -129,9 +130,9 @@ func newMsg(direction MsgDirection, channel courier.Channel, urn urns.URN, text 
 
 const insertMsgSQL = `
 INSERT INTO
-	msgs_msg(org_id, uuid, direction, text, attachments, msg_count, error_count, high_priority, status,
+	msgs_msg(org_id, uuid, direction, text, attachments, msg_count, error_count, high_priority, status, metadata,
              visibility, external_id, channel_id, contact_id, contact_urn_id, created_on, modified_on, next_attempt, queued_on, sent_on)
-    VALUES(:org_id, :uuid, :direction, :text, :attachments, :msg_count, :error_count, :high_priority, :status,
+    VALUES(:org_id, :uuid, :direction, :text, :attachments, :msg_count, :error_count, :high_priority, :status, :metadata,
            :visibility, :external_id, :channel_id, :contact_id, :contact_urn_id, :created_on, :modified_on, :next_attempt, :queued_on, :sent_on)
 RETURNING id
 `
@@ -240,7 +241,14 @@ SELECT
 	created_on,
 	modified_on,
 	queued_on,
-	sent_on
+	sent_on,
+	(
+		CASE WHEN m.metadata IS NULL OR m.metadata = '' THEN
+		'{}'::jsonb
+		ELSE
+		metadata::jsonb
+		END
+	) as metadata
 FROM
 	msgs_msg m
 WHERE
