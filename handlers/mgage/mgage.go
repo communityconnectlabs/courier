@@ -6,6 +6,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httputil"
+	"strconv"
+	"time"
+
 	"github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/handlers"
 	"github.com/nyaruka/courier/utils"
@@ -13,10 +18,6 @@ import (
 	"github.com/nyaruka/gocommon/urns"
 	"github.com/nyaruka/phonenumbers"
 	"github.com/pkg/errors"
-	"net/http"
-	"net/http/httputil"
-	"strconv"
-	"time"
 )
 
 func init() {
@@ -182,6 +183,19 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 
 	// build our msg
 	msg := h.Backend().NewIncomingMsg(channel, urn, payload.Text).WithReceivedOn(date)
+
+	// check whether the text contains opt-out words
+	if utils.CheckOptOutKeywordPresence(msg.Text()) {
+		textMessage := channel.OrgConfigForKey(utils.OptOutMessageBackKey, utils.OptOutDefaultMessageBack)
+		msgBack := h.Backend().NewOutgoingMsg(
+			channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", "",
+		)
+		_, err := h.SendMsg(ctx, msgBack)
+		if err != nil {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+		}
+	}
+
 	return handlers.WriteMsgsAndResponse(ctx, h, []courier.Msg{msg}, w, r)
 }
 
