@@ -574,9 +574,11 @@ func (b *backend) WriteSMPPLog(ctx context.Context, log *courier.SMPPLog) error 
 	timeout, cancel := context.WithTimeout(ctx, backendTimeout)
 	defer cancel()
 
-	err := writeSMPPLog(timeout, b, log)
-	if err != nil {
-		logrus.WithError(err).Error("error writing channel log")
+	if log.ChannelID != courier.NilChannelID {
+		err := writeSMPPLog(timeout, b, log)
+		if err != nil {
+			logrus.WithError(err).Error("error writing channel log")
+		}
 	}
 	return nil
 }
