@@ -37,6 +37,7 @@ func (h *handler) Initialize(s Server) error {
 	s.AddHandlerRoute(h, http.MethodPost, "receive", h.receiveMessage)
 	s.AddHandlerRoute(h, http.MethodPost, "history", h.chatHistory)
 	s.AddHandlerRoute(h, http.MethodPost, "feedback", h.receiveFeedback)
+	s.AddHandlerRoute(h, http.MethodPost, "set-agent", h.setAgent)
 	return nil
 }
 
@@ -244,6 +245,36 @@ func (h *handler) receiveFeedback(ctx context.Context, channel Channel, w http.R
 	return handlers.WriteMsgsAndResponse(ctx, h, []Msg{msg}, w, r)
 }
 
+func (h *handler) setAgent(ctx context.Context, channel Channel, w http.ResponseWriter, r *http.Request) ([]Event, error) {
+	payload := &setAgentPayload{}
+	err := handlers.DecodeAndValidateJSON(payload, r)
+	if err != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	}
+
+	// no agent name? ignore this
+	if payload.AgentName == "" {
+		return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no agent name")
+	}
+
+	urn, errURN := urns.NewURNFromParts(channel.Schemes()[0], payload.URN, "", "")
+	if errURN != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errURN)
+	}
+
+	contact, err := h.Backend().GetContact(ctx, channel, urn, "", "")
+	if err != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	}
+
+	_, errSetFieldValue := h.Backend().SetContactCustomField(ctx, contact, "last_agent_name", payload.AgentName)
+	if errSetFieldValue != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errSetFieldValue)
+	}
+
+	return nil, WriteDataResponse(ctx, w, http.StatusOK, "Events Handled", []interface{}{})
+}
+
 func (h *handler) sendMsgPart(msg Msg, apiURL string, payload *dataPayload) (string, *ChannelLog, error) {
 	jsonBody, err := json.Marshal(payload)
 	if err != nil {
@@ -412,6 +443,11 @@ type feedbackResponsePayload struct {
 	From            string  `json:"from"`
 	FeedbackRate    float32 `json:"rate"`
 	FeedbackComment string  `json:"comment"`
+}
+
+type setAgentPayload struct {
+	URN       string `json:"urn"`
+	AgentName string `json:"agent_name"`
 }
 
 type dataPayload struct {
