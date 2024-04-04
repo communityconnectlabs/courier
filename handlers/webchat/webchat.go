@@ -352,10 +352,26 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 		metadata["sharing_config"] = msg.SharingConfig()
 	}
 
-	data.Metadata = metadata
-
 	// the status that will be written for this message
 	status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), MsgErrored)
+
+	contact, errGetContact := h.Backend().GetContact(ctx, msg.Channel(), msg.URN(), "", "")
+	if errGetContact != nil {
+		log := NewChannelLog("unable to load contact", msg.Channel(), msg.ID(), "", "", NilStatusCode, "", "", time.Duration(0), errGetContact)
+		status.AddLog(log)
+	}
+
+	agentName, errGetFieldValue := h.Backend().GetContactCustomField(ctx, contact, "last_agent_name")
+	if errGetFieldValue != nil {
+		log := NewChannelLog("unable to load contact field value", msg.Channel(), msg.ID(), "", "", NilStatusCode, "", "", time.Duration(0), errGetFieldValue)
+		status.AddLog(log)
+	}
+
+	if agentName != "" {
+		metadata["agent_name"] = agentName
+	}
+
+	data.Metadata = metadata
 
 	// whether we encountered any errors sending any parts
 	hasError := true

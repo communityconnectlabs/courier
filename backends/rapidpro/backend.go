@@ -143,6 +143,16 @@ ORDER BY created_on DESC
 LIMIT 1;
 `
 
+const getContactCustomFields = `
+SELECT
+	uuid, fields
+FROM
+    contacts_contact
+WHERE
+    org_id = $1 AND uuid = $2 AND is_active = true
+LIMIT 1;
+`
+
 const updateContactFieldsSQL = `
 UPDATE
 	contacts_contact c
@@ -189,6 +199,28 @@ func (b *backend) SetContactCustomField(ctx context.Context, contact courier.Con
 	}
 
 	return contactField, nil
+}
+
+// GetContactCustomField gets a contact custom field value
+func (b *backend) GetContactCustomField(ctx context.Context, contact courier.Contact, fieldName string) (string, error) {
+	dbContact := contact.(*DBContact)
+	contactField := &DBContactField{}
+	err := b.db.GetContext(ctx, contactField, getOrgCustomField, dbContact.OrgID_, fieldName)
+	if err != nil {
+		return "", err
+	}
+
+	contactFieldValues := &ContactCustomFieldValues{}
+	err = b.db.GetContext(ctx, contactFieldValues, getContactCustomFields, dbContact.OrgID_, contact.UUID())
+	if err != nil {
+		return "", err
+	}
+
+	//textValue := make(map[string]map[string]string)
+	value_ := contactFieldValues.Fields_.Get(contactField.UUID().String(), "")
+	fmt.Println(value_)
+
+	return "", nil
 }
 
 const updateContactLang = `
