@@ -339,6 +339,10 @@ func (mb *MockBackend) SetContactCustomField(ctx context.Context, contact Contac
 	return contactField, nil
 }
 
+func (mb *MockBackend) GetContactCustomFieldValue(ctx context.Context, contact Contact, fieldType string, fieldName string) (string, error) {
+	return "", nil
+}
+
 // AddChannel adds a test channel to the test server
 func (mb *MockBackend) AddChannel(channel Channel) {
 	mb.channels[channel.UUID()] = channel

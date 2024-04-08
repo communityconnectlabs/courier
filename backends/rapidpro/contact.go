@@ -252,3 +252,9 @@ type FieldUpdate struct {
 	ContactID ContactID `db:"contact_id"`
 	Updates   string    `db:"updates"`
 }
+
+// ContactCustomFieldValues the values of custom fields for contacts
+type ContactCustomFieldValues struct {
+	UUID_   courier.ContactFieldUUID `db:"uuid"`
+	Fields_ null.Map                 `db:"fields"`
+}
