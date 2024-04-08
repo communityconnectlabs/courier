@@ -361,7 +361,7 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 		status.AddLog(log)
 	}
 
-	agentName, errGetFieldValue := h.Backend().GetContactCustomField(ctx, contact, "last_agent_name")
+	agentName, errGetFieldValue := h.Backend().GetContactCustomFieldValue(ctx, contact, "text", "last_agent_name")
 	if errGetFieldValue != nil {
 		log := NewChannelLog("unable to load contact field value", msg.Channel(), msg.ID(), "", "", NilStatusCode, "", "", time.Duration(0), errGetFieldValue)
 		status.AddLog(log)

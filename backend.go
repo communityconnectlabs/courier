@@ -50,8 +50,8 @@ type Backend interface {
 	// SetContactCustomField sets a contact custom field value
 	SetContactCustomField(ctx context.Context, contact Contact, fieldName string, value string) (ContactField, error)
 
-	// GetContactCustomField gets a contact custom field value
-	GetContactCustomField(ctx context.Context, contact Contact, fieldName string) (string, error)
+	// GetContactCustomFieldValue gets a contact custom field value
+	GetContactCustomFieldValue(ctx context.Context, contact Contact, fieldType string, fieldName string) (string, error)
 
 	// GetContactMessages load all messages by channel and contact
 	GetContactMessages(channel Channel, contact Contact) ([]Msg, error)

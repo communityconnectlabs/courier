@@ -339,7 +339,7 @@ func (mb *MockBackend) SetContactCustomField(ctx context.Context, contact Contac
 	return contactField, nil
 }
 
-func (mb *MockBackend) GetContactCustomField(ctx context.Context, contact Contact, fieldName string) (string, error) {
+func (mb *MockBackend) GetContactCustomFieldValue(ctx context.Context, contact Contact, fieldType string, fieldName string) (string, error) {
 	return "", nil
 }
 

@@ -201,8 +201,8 @@ func (b *backend) SetContactCustomField(ctx context.Context, contact courier.Con
 	return contactField, nil
 }
 
-// GetContactCustomField gets a contact custom field value
-func (b *backend) GetContactCustomField(ctx context.Context, contact courier.Contact, fieldName string) (string, error) {
+// GetContactCustomFieldValue gets a contact custom field value
+func (b *backend) GetContactCustomFieldValue(ctx context.Context, contact courier.Contact, fieldType string, fieldName string) (string, error) {
 	dbContact := contact.(*DBContact)
 	contactField := &DBContactField{}
 	err := b.db.GetContext(ctx, contactField, getOrgCustomField, dbContact.OrgID_, fieldName)
@@ -216,11 +216,19 @@ func (b *backend) GetContactCustomField(ctx context.Context, contact courier.Con
 		return "", err
 	}
 
-	//textValue := make(map[string]map[string]string)
-	value_ := contactFieldValues.Fields_.Get(contactField.UUID().String(), "")
-	fmt.Println(value_)
+	if val, ok := contactFieldValues.Fields_.Map()[contactField.UUID().String()]; ok {
+		if innerMap, ok := val.(map[string]interface{}); ok {
+			if v, ok := innerMap[fieldType]; ok {
+				return v.(string), nil
+			} else {
+				return "", errors.Wrap(err, fmt.Sprintf("error fieldType not found for %s", contactField.UUID().String()))
+			}
+		} else {
+			return "", errors.Wrap(err, fmt.Sprintf("field is not map[string]interface{}"))
+		}
+	}
 
-	return "", nil
+	return "", errors.Wrap(err, fmt.Sprintf("field value not found"))
 }
 
 const updateContactLang = `
