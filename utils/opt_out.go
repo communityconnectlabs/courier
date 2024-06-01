@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"strings"
 	"reflect"
+	"strings"
 )
 
 var keywords = [...]string{
@@ -102,6 +102,7 @@ var keywords = [...]string{
 
 const OptOutMessageBackKey = "opt_out_message_back"
 const OptOutDefaultMessageBack = "If this is an emergency, call 911. For more help from CCL contact support@communityconnectlabs.com. Msg freq. varies. Reply STOP to cancel."
+const OptOutDisabled = "opt_out_disabled"
 
 // CheckOptOutKeywordPresence is used to check the text contains opt-out words
 func CheckOptOutKeywordPresence(text string) bool {
