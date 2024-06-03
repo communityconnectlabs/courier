@@ -331,7 +331,7 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	}
 
 	metadata := make(map[string]interface{}, 0)
-	metadata["timestamp"] = msg.SentOn().String()
+	metadata["timestamp"] = time.Now().String()
 
 	if len(msg.QuickReplies()) > 0 {
 		buildQuickReplies := make([]string, 0)
