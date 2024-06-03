@@ -143,3 +143,14 @@ func StrictTelForCountry(number string, country string) (urns.URN, error) {
 
 	return urn, nil
 }
+
+func CheckChannelOptOut(m courier.Msg) bool {
+	containsOptOutKeywords := utils.CheckOptOutKeywordPresence(m.Text())
+	if ((m.Channel().ChannelType().String() == "T" || m.Channel().ChannelType().String() == "TMS") && len(m.Channel().Address()) <= 6 && containsOptOutKeywords) ||
+		(m.Channel().ChannelType().String() == "MGA" && containsOptOutKeywords) ||
+		(m.Channel().ChannelType().String() == "NX" && containsOptOutKeywords) {
+		return true
+	} else {
+		return false
+	}
+}
