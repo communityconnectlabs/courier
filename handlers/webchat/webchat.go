@@ -166,10 +166,12 @@ func (h *handler) chatHistory(ctx context.Context, channel Channel, w http.Respo
 	// the list of data we will return in our response
 	responseMsgs := make([]*webChatMessagePayload, 0)
 	for _, msg := range msgs {
+		msgTimestamp := msg.ReceivedOn().String()
 		origin := "user"
 		msgDirection := msg.(*rapidpro.DBMsg).Direction_
 		if msgDirection == "O" {
 			origin = "ws"
+			msgTimestamp = msg.SentOn().String()
 		}
 		responseMsg := &webChatMessagePayload{
 			Message:     msg.Text(),
@@ -179,6 +181,7 @@ func (h *handler) chatHistory(ctx context.Context, channel Channel, w http.Respo
 		}
 
 		metadata := make(map[string]interface{}, 0)
+		metadata["timestamp"] = msgTimestamp
 
 		if len(msg.QuickReplies()) > 0 {
 			buildQuickReplies := make([]string, 0)
@@ -328,6 +331,7 @@ func (h *handler) SendMsg(ctx context.Context, msg Msg) (MsgStatus, error) {
 	}
 
 	metadata := make(map[string]interface{}, 0)
+	metadata["timestamp"] = time.Now().Format("2006-01-02 15:04:05")
 
 	if len(msg.QuickReplies()) > 0 {
 		buildQuickReplies := make([]string, 0)
