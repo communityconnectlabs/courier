@@ -11,3 +11,6 @@ test-cover:
 test-cover-total:
 	make test
 	go tool cover -func coverage.text | grep total | awk '{print $3}'
+
+
+.PHONY: build test test-cover test-cover-total
