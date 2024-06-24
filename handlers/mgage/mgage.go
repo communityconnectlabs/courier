@@ -184,15 +184,19 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 	// build our msg
 	msg := h.Backend().NewIncomingMsg(channel, urn, payload.Text).WithReceivedOn(date)
 
-	// check whether the text contains opt-out words
-	if utils.CheckOptOutKeywordPresence(msg.Text()) {
-		textMessage := channel.OrgConfigForKey(utils.OptOutMessageBackKey, utils.OptOutDefaultMessageBack)
-		msgBack := h.Backend().NewOutgoingMsg(
-			channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", "",
-		)
-		_, err := h.SendMsg(ctx, msgBack)
-		if err != nil {
-			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	// check whether the organization has opt-out enabled or not
+	optOutDisabled := channel.OrgConfigForKey(utils.OptOutDisabled, false)
+	if optOutDisabled == false {
+		// check whether the text contains opt-out words
+		if utils.CheckOptOutKeywordPresence(msg.Text()) {
+			textMessage := channel.OrgConfigForKey(utils.OptOutMessageBackKey, utils.OptOutDefaultMessageBack)
+			msgBack := h.Backend().NewOutgoingMsg(
+				channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", "",
+			)
+			_, err := h.SendMsg(ctx, msgBack)
+			if err != nil {
+				return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+			}
 		}
 	}
 
