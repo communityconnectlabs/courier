@@ -370,6 +370,12 @@ func setSendURL(s *httptest.Server, h courier.ChannelHandler, c courier.Channel,
 }
 
 var defaultSendTestCases = []ChannelSendTestCase{
+	{Label: "Link Sending",
+		Text: "Link Sending https://link.com", URN: "whatsapp:250788123123", Path: "/v1/messages",
+		Status: "W", ExternalID: "157b5e14568e8",
+		ResponseBody: `{ "messages": [{"id": "157b5e14568e8"}] }`, ResponseStatus: 201,
+		RequestBody: `{"to":"250788123123","type":"text","preview_url":true,"text":{"body":"Link Sending https://link.com"}}`,
+		SendPrep:    setSendURL},
 	{Label: "Plain Send",
 		Text: "Simple Message", URN: "whatsapp:250788123123", Path: "/v1/messages",
 		Status: "W", ExternalID: "157b5e14568e8",
@@ -407,7 +413,7 @@ var defaultSendTestCases = []ChannelSendTestCase{
 		RequestBody: `{"to":"250788123123","type":"text","text":{"body":"Error"}}`,
 		SendPrep:    setSendURL},
 	{Label: "Audio Send",
-		Text:   "audio has no caption",
+		Text:   "audio has no caption, sent as text",
 		URN:    "whatsapp:250788123123",
 		Status: "W", ExternalID: "157b5e14568e8",
 		Attachments: []string{"audio/mpeg:https://foo.bar/audio.mp3"},
@@ -416,6 +422,39 @@ var defaultSendTestCases = []ChannelSendTestCase{
 				Method: "POST",
 				Path:   "/v1/messages",
 				Body:   `{"to":"250788123123","type":"audio","audio":{"link":"https://foo.bar/audio.mp3"}}`,
+			}: MockedResponse{
+				Status: 201,
+				Body:   `{ "messages": [{"id": "157b5e14568e8"}] }`,
+			},
+			MockedRequest{
+				Method: "POST",
+				Path:   "/v1/messages",
+				Body:   `{"to":"250788123123","type":"text","text":{"body":"audio has no caption, sent as text"}}`,
+			}: MockedResponse{
+				Status: 201,
+				Body:   `{ "messages": [{"id": "157b5e14568e8"}] }`,
+			},
+		},
+		SendPrep: setSendURL,
+	},
+	{Label: "Audio Send with link in text",
+		Text:   "audio has no caption, sent as text with a https://example.com",
+		URN:    "whatsapp:250788123123",
+		Status: "W", ExternalID: "157b5e14568e8",
+		Attachments: []string{"audio/mpeg:https://foo.bar/audio.mp3"},
+		Responses: map[MockedRequest]MockedResponse{
+			MockedRequest{
+				Method: "POST",
+				Path:   "/v1/messages",
+				Body:   `{"to":"250788123123","type":"audio","audio":{"link":"https://foo.bar/audio.mp3"}}`,
+			}: MockedResponse{
+				Status: 201,
+				Body:   `{ "messages": [{"id": "157b5e14568e8"}] }`,
+			},
+			MockedRequest{
+				Method: "POST",
+				Path:   "/v1/messages",
+				Body:   `{"to":"250788123123","type":"text","preview_url":true,"text":{"body":"audio has no caption, sent as text with a https://example.com"}}`,
 			}: MockedResponse{
 				Status: 201,
 				Body:   `{ "messages": [{"id": "157b5e14568e8"}] }`,
@@ -683,6 +722,13 @@ var defaultSendTestCases = []ChannelSendTestCase{
 			},
 		},
 		SendPrep: setSendURL},
+	{Label: "Update URN with wa_id returned",
+		Text: "Simple Message", URN: "whatsapp:5511987654321", Path: "/v1/messages",
+		Status: "W", ExternalID: "157b5e14568e8",
+		ResponseBody: `{ "contacts":[{"input":"5511987654321","wa_id":"551187654321"}], "messages": [{"id": "157b5e14568e8"}] }`, ResponseStatus: 201,
+		RequestBody: `{"to":"5511987654321","type":"text","text":{"body":"Simple Message"}}`,
+		SendPrep:    setSendURL,
+		NewURN:      "whatsapp:551187654321"},
 }
 
 var mediaCacheSendTestCases = []ChannelSendTestCase{

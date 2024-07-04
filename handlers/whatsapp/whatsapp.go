@@ -16,6 +16,7 @@ import (
 	"github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/handlers"
 	"github.com/nyaruka/courier/utils"
+	"github.com/nyaruka/gocommon/httpx"
 	"github.com/nyaruka/gocommon/urns"
 	"github.com/nyaruka/redisx"
 	"github.com/patrickmn/go-cache"
@@ -357,9 +358,10 @@ var waIgnoreStatuses = map[string]bool{
 // }
 
 type mtTextPayload struct {
-	To   string `json:"to"    validate:"required"`
-	Type string `json:"type"  validate:"required"`
-	Text struct {
+	To         string `json:"to"    validate:"required"`
+	Type       string `json:"type"  validate:"required"`
+	PreviewURL bool   `json:"preview_url,omitempty"`
+	Text       struct {
 		Body string `json:"body" validate:"required"`
 	} `json:"text"`
 }
@@ -546,6 +548,7 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 	// we are wired it there were no errors
 	if err == nil {
+		// so update contact URN if wppID != ""
 		if wppID != "" {
 			newURN, _ := urns.NewWhatsAppURN(wppID)
 			err = status.SetUpdatedURN(msg.URN(), newURN)
@@ -574,6 +577,8 @@ func buildPayloads(msg courier.Msg, h *handler) ([]interface{}, []*courier.Chann
 	wppVersion := msg.Channel().ConfigForKey("version", "0").(string)
 	isInteractiveMsgCompatible := semver.Compare(wppVersion, interactiveMsgMinSupVersion)
 	isInteractiveMsg := (isInteractiveMsgCompatible >= 0) && (len(qrs) > 0)
+
+	textAsCaption := false
 
 	if len(msg.Attachments()) > 0 {
 		for attachmentCount, attachment := range msg.Attachments() {
@@ -605,6 +610,7 @@ func buildPayloads(msg courier.Msg, h *handler) ([]interface{}, []*courier.Chann
 				}
 				if attachmentCount == 0 && !isInteractiveMsg {
 					mediaPayload.Caption = msg.Text()
+					textAsCaption = true
 				}
 				mediaPayload.Filename, err = utils.BasePathForURL(fileURL)
 
@@ -621,6 +627,7 @@ func buildPayloads(msg courier.Msg, h *handler) ([]interface{}, []*courier.Chann
 				}
 				if attachmentCount == 0 && !isInteractiveMsg {
 					mediaPayload.Caption = msg.Text()
+					textAsCaption = true
 				}
 				payload.Image = mediaPayload
 				payloads = append(payloads, payload)
@@ -631,6 +638,7 @@ func buildPayloads(msg courier.Msg, h *handler) ([]interface{}, []*courier.Chann
 				}
 				if attachmentCount == 0 && !isInteractiveMsg {
 					mediaPayload.Caption = msg.Text()
+					textAsCaption = true
 				}
 				payload.Video = mediaPayload
 				payloads = append(payloads, payload)
@@ -640,6 +648,28 @@ func buildPayloads(msg courier.Msg, h *handler) ([]interface{}, []*courier.Chann
 				attachmentLogs := []*courier.ChannelLog{courier.NewChannelLogFromError("Error sending message", msg.Channel(), msg.ID(), duration, err)}
 				logs = append(logs, attachmentLogs...)
 				break
+			}
+		}
+
+		if !textAsCaption && !isInteractiveMsg {
+			for _, part := range parts {
+
+				//check if you have a link
+				var payload mtTextPayload
+				if strings.Contains(part, "https://") || strings.Contains(part, "http://") {
+					payload = mtTextPayload{
+						To:         msg.URN().Path(),
+						Type:       "text",
+						PreviewURL: true,
+					}
+				} else {
+					payload = mtTextPayload{
+						To:   msg.URN().Path(),
+						Type: "text",
+					}
+				}
+				payload.Text.Body = part
+				payloads = append(payloads, payload)
 			}
 		}
 
@@ -798,9 +828,20 @@ func buildPayloads(msg courier.Msg, h *handler) ([]interface{}, []*courier.Chann
 				}
 			} else {
 				for _, part := range parts {
-					payload := mtTextPayload{
-						To:   msg.URN().Path(),
-						Type: "text",
+
+					//check if you have a link
+					var payload mtTextPayload
+					if strings.Contains(part, "https://") || strings.Contains(part, "http://") {
+						payload = mtTextPayload{
+							To:         msg.URN().Path(),
+							Type:       "text",
+							PreviewURL: true,
+						}
+					} else {
+						payload = mtTextPayload{
+							To:   msg.URN().Path(),
+							Type: "text",
+						}
 					}
 					payload.Text.Body = part
 					payloads = append(payloads, payload)
@@ -863,7 +904,7 @@ func (h *handler) fetchMediaID(msg courier.Msg, mimeType, mediaURL string) (stri
 		return "", logs, errors.Wrapf(err, "error building request to media endpoint")
 	}
 	setWhatsAppAuthHeader(&req.Header, msg.Channel())
-	req.Header.Add("Content-Type", http.DetectContentType(rr.Body))
+	req.Header.Add("Content-Type", httpx.DetectContentType(rr.Body))
 	rr, err = utils.MakeHTTPRequest(req)
 	log = courier.NewChannelLogFromRR("Uploading media to WhatsApp", msg.Channel(), msg.ID(), rr).WithError("Error uploading media to WhatsApp", err)
 	logs = append(logs, log)
@@ -1012,7 +1053,14 @@ func sendWhatsAppMsg(rc redis.Conn, msg courier.Msg, sendPath *url.URL, payload 
 		return wppID, externalID, []*courier.ChannelLog{log, checkLog, retryLog}, err
 	}
 	externalID, err := getSendWhatsAppMsgId(rr)
-	return "", externalID, []*courier.ChannelLog{log}, err
+	if err != nil {
+		return "", "", []*courier.ChannelLog{log}, err
+	}
+	wppID, err := jsonparser.GetString(rr.Body, "contacts", "[0]", "wa_id")
+	if wppID != "" && wppID != msg.URN().Path() {
+		return wppID, externalID, []*courier.ChannelLog{log}, err
+	}
+	return "", externalID, []*courier.ChannelLog{log}, nil
 }
 
 func setWhatsAppAuthHeader(header *http.Header, channel courier.Channel) {
