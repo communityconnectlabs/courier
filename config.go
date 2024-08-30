@@ -33,6 +33,9 @@ type Config struct {
 	WebChatServerSecret       string `help:"key for encoding the websocket tokens"`
 	SMPPServerEndpoint        string `help:"the URL of the server that handles SMPP connections"`
 	SMPPServerToken           string `help:"the token of the server that handles SMPP connections"`
+	KaleyraMMSEndpoint        string `help:"the Kaleyra endpoint for MMS service"`
+	KaleyraMMSUsername        string `help:"the Kaleyra username for MMS service authentication"`
+	KaleyraMMSPassword        string `help:"the Kaleyra password for MMS service authentication"`
 
 	// IncludeChannels is the list of channels to enable, empty means include all
 	IncludeChannels []string

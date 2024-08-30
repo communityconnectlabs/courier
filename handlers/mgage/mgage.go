@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nyaruka/courier"
@@ -37,7 +39,43 @@ func (h *handler) Initialize(s courier.Server) error {
 	h.SetServer(s)
 	s.AddHandlerRoute(h, http.MethodPost, "receive", h.receiveMessage)
 	s.AddHandlerRoute(h, http.MethodPost, "status", h.receiveStatus)
+	s.AddHandlerRoute(h, http.MethodPost, "mms_receive", h.receiveMMSMessage)
+	s.AddHandlerRoute(h, http.MethodPost, "mms_status", h.receiveMMSStatus)
 	return nil
+}
+
+func (h *handler) SendMsgMMS(ctx context.Context, msg courier.Msg) (*utils.RequestResponse, error) {
+	sendURL := h.Server().Config().KaleyraMMSEndpoint
+	username := h.Server().Config().KaleyraMMSUsername
+	password := h.Server().Config().KaleyraMMSPassword
+
+	form := url.Values{
+		"serviceCode":         []string{strings.TrimLeft(msg.Channel().Address(), "+")},
+		"destination":         []string{strings.TrimLeft(msg.URN().Path(), "+")},
+		"subject":             []string{""},
+		"isSubjectEncoded":    []string{"false"},
+		"senderID":            []string{""},
+		"clientTransactionID": []string{msg.ID().String()},
+		"contentFileName":     []string{""},
+		"contentURL":          []string{""},
+		"contentType":         []string{""},
+		"contentFLock":        []string{"false"},
+		"notifyURL":           []string{""},
+		"productCode":         []string{""},
+		"action":              []string{"CONTENT"},
+		"allowAdaptation":     []string{"true"},
+		"priority":            []string{"normal"},
+	}
+
+	req, err := http.NewRequest(http.MethodPost, sendURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(username, password)
+
+	rr, err := utils.MakeHTTPRequest(req)
+	return rr, err
 }
 
 func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStatus, error) {
@@ -53,19 +91,57 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 	status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
 
-	if h.shouldSplit(msg.Text(), msgEncoding) {
-		parts := h.encodeSplit(msg.Text(), msgEncoding)
-		partsLength := len(parts)
-		for index, part := range parts {
+	if len(msg.Attachments()) > 0 {
+		// using REST API for MMS
+		rr, err := h.SendMsgMMS(ctx, msg)
+
+		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
+		if err != nil {
+			status.SetStatus(courier.MsgFailed)
+		}
+
+		status.AddLog(log)
+	} else {
+		if h.shouldSplit(msg.Text(), msgEncoding) {
+			parts := h.encodeSplit(msg.Text(), msgEncoding)
+			partsLength := len(parts)
+			for index, part := range parts {
+				msgID, _ := strconv.Atoi(msg.ID().String())
+				payload := &moPayload{
+					ID:       int32(msgID),
+					Sender:   msg.Channel().Address(),
+					Receiver: msg.URN().Path(),
+					Text:     part,
+					Encoding: string(msgEncoding),
+					PartNum:  int32(index + 1),
+					Parts:    int32(partsLength),
+				}
+
+				rr, err := h.sendToSMPP(payload)
+				log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
+
+				if err != nil {
+					status.SetStatus(courier.MsgFailed)
+					_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+						ChannelID: msg.Channel().ID(),
+						MsgID:     msg.ID(),
+						Status:    courier.MsgFailed,
+						CreatedOn: time.Now(),
+					})
+				}
+
+				status.AddLog(log)
+			}
+		} else {
 			msgID, _ := strconv.Atoi(msg.ID().String())
 			payload := &moPayload{
 				ID:       int32(msgID),
 				Sender:   msg.Channel().Address(),
 				Receiver: msg.URN().Path(),
-				Text:     part,
+				Text:     msg.Text(),
 				Encoding: string(msgEncoding),
-				PartNum:  int32(index + 1),
-				Parts:    int32(partsLength),
+				PartNum:  1,
+				Parts:    1,
 			}
 
 			rr, err := h.sendToSMPP(payload)
@@ -83,40 +159,14 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 			status.AddLog(log)
 		}
-	} else {
-		msgID, _ := strconv.Atoi(msg.ID().String())
-		payload := &moPayload{
-			ID:       int32(msgID),
-			Sender:   msg.Channel().Address(),
-			Receiver: msg.URN().Path(),
-			Text:     msg.Text(),
-			Encoding: string(msgEncoding),
-			PartNum:  1,
-			Parts:    1,
-		}
 
-		rr, err := h.sendToSMPP(payload)
-		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
-
-		if err != nil {
-			status.SetStatus(courier.MsgFailed)
-			_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
-				ChannelID: msg.Channel().ID(),
-				MsgID:     msg.ID(),
-				Status:    courier.MsgFailed,
-				CreatedOn: time.Now(),
-			})
-		}
-
-		status.AddLog(log)
+		_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+			ChannelID: msg.Channel().ID(),
+			MsgID:     msg.ID(),
+			Status:    courier.MsgWired,
+			CreatedOn: time.Now(),
+		})
 	}
-
-	_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
-		ChannelID: msg.Channel().ID(),
-		MsgID:     msg.ID(),
-		Status:    courier.MsgWired,
-		CreatedOn: time.Now(),
-	})
 
 	return status, nil
 }
@@ -358,6 +408,14 @@ func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
 	req.Header.Add("Authorization", h.Server().Config().SMPPServerToken)
 
 	return utils.MakeHTTPRequest(req)
+}
+
+func (h *handler) receiveMMSMessage(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
+	return nil, nil
+}
+
+func (h *handler) receiveMMSStatus(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
+	return nil, nil
 }
 
 type MsgEncoding string
