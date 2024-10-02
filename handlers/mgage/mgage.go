@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/handlers"
@@ -44,30 +45,52 @@ func (h *handler) Initialize(s courier.Server) error {
 	return nil
 }
 
-func (h *handler) SendMsgMMS(ctx context.Context, msg courier.Msg) (*utils.RequestResponse, error) {
+func (h *handler) SendLongcodeMsgMMS(ctx context.Context, msg courier.Msg) (*utils.RequestResponse, error) {
+	return nil, nil
+}
+
+func (h *handler) SendShortcodeMsgMMS(ctx context.Context, msg courier.Msg) (*utils.RequestResponse, error) {
 	sendURL := h.Server().Config().KaleyraMMSEndpoint
 	username := h.Server().Config().KaleyraMMSUsername
 	password := h.Server().Config().KaleyraMMSPassword
 
+	channelAddress := strings.TrimLeft(msg.Channel().Address(), "+")
+	productCode := fmt.Sprintf("CCX_%s", channelAddress)
+
+	attachment := msg.Attachments()[0]
+	parts := strings.SplitN(attachment, ":", 2)
+	mimeType := parts[0]
+	fullURL := parts[1]
+
+	// Extract filename from URL
+	urlParts := strings.Split(fullURL, "/")
+	filename := urlParts[len(urlParts)-1]
+	maxLength := 63
+	if utf8.RuneCountInString(filename) > maxLength {
+		filename = filename[:maxLength]
+	}
+
+	destination := fmt.Sprintf("tel:%s", strings.TrimLeft(msg.URN().Path(), "+"))
+
 	form := url.Values{
-		"serviceCode":         []string{strings.TrimLeft(msg.Channel().Address(), "+")},
-		"destination":         []string{strings.TrimLeft(msg.URN().Path(), "+")},
+		"serviceCode":         []string{channelAddress},
+		"destination":         []string{destination},
 		"subject":             []string{""},
-		"isSubjectEncoded":    []string{"false"},
-		"senderID":            []string{""},
-		"clientTransactionID": []string{msg.ID().String()},
-		"contentFileName":     []string{""},
-		"contentURL":          []string{""},
-		"contentType":         []string{""},
+		"isSubjectEncoded":    []string{"true"},
+		"senderID":            []string{channelAddress},
+		"clientTransactionID": []string{msg.UUID().String()},
+		"contentFileName":     []string{filename},
+		"contentURL":          []string{fullURL},
+		"contentType":         []string{mimeType},
 		"contentFLock":        []string{"false"},
-		"notifyURL":           []string{""},
-		"productCode":         []string{""},
+		"notifyURL":           []string{"https://vonage-test.free.beeceptor.com"},
+		"productCode":         []string{productCode},
 		"action":              []string{"CONTENT"},
 		"allowAdaptation":     []string{"true"},
 		"priority":            []string{"normal"},
 	}
 
-	req, err := http.NewRequest(http.MethodPost, sendURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequest(http.MethodPost, sendURL+"?"+form.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +115,19 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 	status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
 
 	if len(msg.Attachments()) > 0 {
-		// using REST API for MMS
-		rr, err := h.SendMsgMMS(ctx, msg)
+		channelAddress := msg.Channel().Address()
+		var rr *utils.RequestResponse
+		var err error
+
+		fmt.Println(channelAddress)
+
+		if len(channelAddress) > 6 {
+			// using REST API for Longcode MMS
+			rr, err = h.SendLongcodeMsgMMS(ctx, msg)
+		} else {
+			// using REST API for Shortcode MMS
+			rr, err = h.SendShortcodeMsgMMS(ctx, msg)
+		}
 
 		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
 		if err != nil {
@@ -101,47 +135,21 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 		}
 
 		status.AddLog(log)
-	} else {
-		if h.shouldSplit(msg.Text(), msgEncoding) {
-			parts := h.encodeSplit(msg.Text(), msgEncoding)
-			partsLength := len(parts)
-			for index, part := range parts {
-				msgID, _ := strconv.Atoi(msg.ID().String())
-				payload := &moPayload{
-					ID:       int32(msgID),
-					Sender:   msg.Channel().Address(),
-					Receiver: msg.URN().Path(),
-					Text:     part,
-					Encoding: string(msgEncoding),
-					PartNum:  int32(index + 1),
-					Parts:    int32(partsLength),
-				}
+	}
 
-				rr, err := h.sendToSMPP(payload)
-				log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
-
-				if err != nil {
-					status.SetStatus(courier.MsgFailed)
-					_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
-						ChannelID: msg.Channel().ID(),
-						MsgID:     msg.ID(),
-						Status:    courier.MsgFailed,
-						CreatedOn: time.Now(),
-					})
-				}
-
-				status.AddLog(log)
-			}
-		} else {
+	if h.shouldSplit(msg.Text(), msgEncoding) {
+		parts := h.encodeSplit(msg.Text(), msgEncoding)
+		partsLength := len(parts)
+		for index, part := range parts {
 			msgID, _ := strconv.Atoi(msg.ID().String())
 			payload := &moPayload{
 				ID:       int32(msgID),
 				Sender:   msg.Channel().Address(),
 				Receiver: msg.URN().Path(),
-				Text:     msg.Text(),
+				Text:     part,
 				Encoding: string(msgEncoding),
-				PartNum:  1,
-				Parts:    1,
+				PartNum:  int32(index + 1),
+				Parts:    int32(partsLength),
 			}
 
 			rr, err := h.sendToSMPP(payload)
@@ -159,14 +167,40 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 			status.AddLog(log)
 		}
+	} else {
+		msgID, _ := strconv.Atoi(msg.ID().String())
+		payload := &moPayload{
+			ID:       int32(msgID),
+			Sender:   msg.Channel().Address(),
+			Receiver: msg.URN().Path(),
+			Text:     msg.Text(),
+			Encoding: string(msgEncoding),
+			PartNum:  1,
+			Parts:    1,
+		}
 
-		_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
-			ChannelID: msg.Channel().ID(),
-			MsgID:     msg.ID(),
-			Status:    courier.MsgWired,
-			CreatedOn: time.Now(),
-		})
+		rr, err := h.sendToSMPP(payload)
+		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
+
+		if err != nil {
+			status.SetStatus(courier.MsgFailed)
+			_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+				ChannelID: msg.Channel().ID(),
+				MsgID:     msg.ID(),
+				Status:    courier.MsgFailed,
+				CreatedOn: time.Now(),
+			})
+		}
+
+		status.AddLog(log)
 	}
+
+	_ = h.Backend().WriteSMPPLog(ctx, &courier.SMPPLog{
+		ChannelID: msg.Channel().ID(),
+		MsgID:     msg.ID(),
+		Status:    courier.MsgWired,
+		CreatedOn: time.Now(),
+	})
 
 	return status, nil
 }
