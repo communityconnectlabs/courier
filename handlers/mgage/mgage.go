@@ -88,7 +88,7 @@ func (h *handler) SendShortcodeMsgMMS(ctx context.Context, msg courier.Msg) (*ut
 		"contentURL":          []string{fullURL},
 		"contentType":         []string{mimeType},
 		"contentFLock":        []string{"false"},
-		"notifyURL":           []string{"https://vonage-test.free.beeceptor.com"},
+		"notifyURL":           []string{""},
 		"productCode":         []string{productCode},
 		"action":              []string{"CONTENT"},
 		"allowAdaptation":     []string{"true"},
