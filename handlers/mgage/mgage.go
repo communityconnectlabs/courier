@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/nyaruka/gocommon/uuids"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -71,6 +72,10 @@ func (h *handler) SendShortcodeMsgMMS(ctx context.Context, msg courier.Msg) (*ut
 	}
 
 	destination := fmt.Sprintf("tel:%s", strings.TrimLeft(msg.URN().Path(), "+"))
+	clientTranscation := fmt.Sprintf("%s-%s", msg.ID().String(), string(uuids.New()))
+	if utf8.RuneCountInString(clientTranscation) > maxLength {
+		clientTranscation = clientTranscation[:maxLength]
+	}
 
 	form := url.Values{
 		"serviceCode":         []string{channelAddress},
@@ -78,7 +83,7 @@ func (h *handler) SendShortcodeMsgMMS(ctx context.Context, msg courier.Msg) (*ut
 		"subject":             []string{""},
 		"isSubjectEncoded":    []string{"true"},
 		"senderID":            []string{channelAddress},
-		"clientTransactionID": []string{msg.UUID().String()},
+		"clientTransactionID": []string{clientTranscation},
 		"contentFileName":     []string{filename},
 		"contentURL":          []string{fullURL},
 		"contentType":         []string{mimeType},
