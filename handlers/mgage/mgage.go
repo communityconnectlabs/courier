@@ -181,8 +181,6 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 		var rr *utils.RequestResponse
 		var err error
 
-		fmt.Println(channelAddress)
-
 		if len(channelAddress) > 6 {
 			// using REST API for Longcode MMS
 			rr, err = h.SendLongcodeMsgMMS(msg)
