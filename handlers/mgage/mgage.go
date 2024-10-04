@@ -46,11 +46,69 @@ func (h *handler) Initialize(s courier.Server) error {
 	return nil
 }
 
-func (h *handler) SendLongcodeMsgMMS(ctx context.Context, msg courier.Msg) (*utils.RequestResponse, error) {
-	return nil, nil
+func (h *handler) SendLongcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, error) {
+	sendURL := h.Server().Config().KaleyraMMSLongcodeEndpoint
+	username := h.Server().Config().KaleyraMMSUsername
+	password := h.Server().Config().KaleyraMMSPassword
+
+	channelAddress := strings.TrimLeft(msg.Channel().Address(), "+")
+	destination := strings.TrimLeft(msg.URN().Path(), "+")
+
+	attachment := msg.Attachments()[0]
+	parts := strings.SplitN(attachment, ":", 2)
+	mimeType := parts[0]
+	fullURL := parts[1]
+
+	mimeParts := strings.SplitN(mimeType, "/", 2)
+	mediaType := mimeParts[0]
+
+	// Extract filename from URL
+	urlParts := strings.Split(fullURL, "/")
+	filename := urlParts[len(urlParts)-1]
+	maxLength := 63
+	if utf8.RuneCountInString(filename) > maxLength {
+		filename = filename[:maxLength]
+	}
+
+	clientTranscationId := fmt.Sprintf("%s-%s", msg.ID().String(), string(uuids.New()))
+	if utf8.RuneCountInString(clientTranscationId) > maxLength {
+		clientTranscationId = clientTranscationId[:maxLength]
+	}
+
+	mmsMsgData := make([]mmsLongcodeMessage, 0)
+	mmsMsg := mmsLongcodeMessage{
+		DisplayName: filename,
+		MediaType:   mediaType,
+		MediaUrl:    fullURL,
+	}
+	mmsMsgData = append(mmsMsgData, mmsMsg)
+
+	payload := &mmsLongcodePayload{
+		RequestId:       clientTranscationId,
+		From:            channelAddress,
+		To:              []string{destination},
+		RefMessageId:    msg.ID().String(),
+		AllowAdaptation: "true",
+		ForwardLock:     "false",
+		Message:         mmsMsgData,
+	}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, sendURL, bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.SetBasicAuth(username, password)
+
+	rr, err := utils.MakeHTTPRequest(req)
+
+	return rr, err
 }
 
-func (h *handler) SendShortcodeMsgMMS(ctx context.Context, msg courier.Msg) (*utils.RequestResponse, error) {
+func (h *handler) SendShortcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, error) {
 	sendURL := h.Server().Config().KaleyraMMSEndpoint
 	username := h.Server().Config().KaleyraMMSUsername
 	password := h.Server().Config().KaleyraMMSPassword
@@ -80,7 +138,6 @@ func (h *handler) SendShortcodeMsgMMS(ctx context.Context, msg courier.Msg) (*ut
 	form := url.Values{
 		"serviceCode":         []string{channelAddress},
 		"destination":         []string{destination},
-		"subject":             []string{""},
 		"isSubjectEncoded":    []string{"true"},
 		"senderID":            []string{channelAddress},
 		"clientTransactionID": []string{clientTranscation},
@@ -88,7 +145,6 @@ func (h *handler) SendShortcodeMsgMMS(ctx context.Context, msg courier.Msg) (*ut
 		"contentURL":          []string{fullURL},
 		"contentType":         []string{mimeType},
 		"contentFLock":        []string{"false"},
-		"notifyURL":           []string{""},
 		"productCode":         []string{productCode},
 		"action":              []string{"CONTENT"},
 		"allowAdaptation":     []string{"true"},
@@ -128,10 +184,10 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 		if len(channelAddress) > 6 {
 			// using REST API for Longcode MMS
-			rr, err = h.SendLongcodeMsgMMS(ctx, msg)
+			rr, err = h.SendLongcodeMsgMMS(msg)
 		} else {
 			// using REST API for Shortcode MMS
-			rr, err = h.SendShortcodeMsgMMS(ctx, msg)
+			rr, err = h.SendShortcodeMsgMMS(msg)
 		}
 
 		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
@@ -486,4 +542,25 @@ type channelPayload struct {
 	MsgID    int32  `json:"msg_id,omitempty"`
 	MsgRef   string `json:"msg_ref,omitempty"`
 	Receiver string `json:"receiver,omitempty"`
+}
+
+type mmsLongcodePayload struct {
+	CustomerId      string               `json:"customerId,omitempty"`
+	RequestId       string               `json:"requestId"`
+	From            string               `json:"from"`
+	To              []string             `json:"to"`
+	Subject         string               `json:"subject,omitempty"`
+	RefMessageId    string               `json:"refMessageId,omitempty"`
+	ReportingKey1   string               `json:"reportingKey1,omitempty"`
+	ReportingKey2   string               `json:"reportingKey2,omitempty"`
+	AllowAdaptation string               `json:"allowAdaptation"`
+	ForwardLock     string               `json:"forwardLock"`
+	Message         []mmsLongcodeMessage `json:"message"`
+}
+
+type mmsLongcodeMessage struct {
+	Text        string `json:"text,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+	MediaType   string `json:"mediaType,omitempty"`
+	MediaUrl    string `json:"mediaUrl,omitempty"`
 }
