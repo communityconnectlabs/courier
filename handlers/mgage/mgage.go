@@ -138,6 +138,7 @@ func (h *handler) SendShortcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, 
 	form := url.Values{
 		"serviceCode":         []string{channelAddress},
 		"destination":         []string{destination},
+		"subject":             []string{""},
 		"isSubjectEncoded":    []string{"true"},
 		"senderID":            []string{channelAddress},
 		"clientTransactionID": []string{clientTranscation},
