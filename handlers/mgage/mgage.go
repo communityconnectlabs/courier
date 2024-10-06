@@ -170,7 +170,7 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 	msgEncoding := GSM7
 	isGSM := gsm7.IsValid(msg.Text())
-	if !isGSM {
+	if !isGSM || strings.Contains(msg.Text(), "@") {
 		msgEncoding = UCS2
 	}
 
