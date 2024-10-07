@@ -48,7 +48,18 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 	msgEncoding := GSM7
 	isGSM := gsm7.IsValid(msg.Text())
-	if !isGSM || strings.Contains(msg.Text(), "@") {
+
+	charsToCheck := []string{"@", "ñ", "é", "ü", "€", "_"}
+
+	foundUCS := false
+	for _, char := range charsToCheck {
+		if strings.Contains(msg.Text(), char) {
+			foundUCS = true
+			break
+		}
+	}
+
+	if !isGSM || foundUCS {
 		msgEncoding = UCS2
 	}
 
