@@ -38,6 +38,7 @@ type Config struct {
 	KaleyraMMSEndpoint         string `help:"the Kaleyra endpoint for MMS service"`
 	KaleyraMMSUsername         string `help:"the Kaleyra username for MMS service authentication"`
 	KaleyraMMSPassword         string `help:"the Kaleyra password for MMS service authentication"`
+	KaleyraMMSProductCode      string `help:"the Kaleyra product code for MMS service"`
 
 	// IncludeChannels is the list of channels to enable, empty means include all
 	IncludeChannels []string

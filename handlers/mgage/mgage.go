@@ -112,9 +112,10 @@ func (h *handler) SendShortcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, 
 	sendURL := h.Server().Config().KaleyraMMSEndpoint
 	username := h.Server().Config().KaleyraMMSUsername
 	password := h.Server().Config().KaleyraMMSPassword
+	baseProductCode := h.Server().Config().KaleyraMMSProductCode
 
 	channelAddress := strings.TrimLeft(msg.Channel().Address(), "+")
-	productCode := fmt.Sprintf("COMCX_%s_COMLABS_000_D", channelAddress)
+	productCode := fmt.Sprintf(baseProductCode, channelAddress)
 
 	attachment := msg.Attachments()[0]
 	parts := strings.SplitN(attachment, ":", 2)
