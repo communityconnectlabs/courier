@@ -33,6 +33,7 @@ type Config struct {
 	WebChatServerSecret        string `help:"key for encoding the websocket tokens"`
 	SMPPServerEndpoint         string `help:"the URL of the server that handles SMPP connections"`
 	SMPPServerToken            string `help:"the token of the server that handles SMPP connections"`
+	SMPPExtraChars             string `help:"extra special chars for SMPP encoding as UCS2"`
 	KaleyraMMSLongcodeEndpoint string `help:"the Kaleyra endpoint for long code MMS service"`
 	KaleyraMMSEndpoint         string `help:"the Kaleyra endpoint for MMS service"`
 	KaleyraMMSUsername         string `help:"the Kaleyra username for MMS service authentication"`
@@ -72,6 +73,7 @@ func NewConfig() *Config {
 		WebChatServerSecret:       "",
 		SMPPServerEndpoint:        "",
 		SMPPServerToken:           "",
+		SMPPExtraChars:            "",
 	}
 }
 
