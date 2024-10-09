@@ -6,11 +6,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/nyaruka/gocommon/uuids"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nyaruka/courier"
 	"github.com/nyaruka/courier/handlers"
@@ -38,7 +41,126 @@ func (h *handler) Initialize(s courier.Server) error {
 	h.SetServer(s)
 	s.AddHandlerRoute(h, http.MethodPost, "receive", h.receiveMessage)
 	s.AddHandlerRoute(h, http.MethodPost, "status", h.receiveStatus)
+	s.AddHandlerRoute(h, http.MethodPost, "mms_receive", h.receiveMMSMessage)
+	s.AddHandlerRoute(h, http.MethodPost, "mms_status", h.receiveMMSStatus)
 	return nil
+}
+
+func (h *handler) SendLongcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, error) {
+	sendURL := h.Server().Config().KaleyraMMSLongcodeEndpoint
+	username := h.Server().Config().KaleyraMMSUsername
+	password := h.Server().Config().KaleyraMMSPassword
+
+	channelAddress := strings.TrimLeft(msg.Channel().Address(), "+")
+	destination := strings.TrimLeft(msg.URN().Path(), "+")
+
+	attachment := msg.Attachments()[0]
+	parts := strings.SplitN(attachment, ":", 2)
+	mimeType := parts[0]
+	fullURL := parts[1]
+
+	mimeParts := strings.SplitN(mimeType, "/", 2)
+	mediaType := mimeParts[0]
+
+	// Extract filename from URL
+	urlParts := strings.Split(fullURL, "/")
+	filename := urlParts[len(urlParts)-1]
+	maxLength := 63
+	if utf8.RuneCountInString(filename) > maxLength {
+		filename = filename[:maxLength]
+	}
+
+	clientTranscationId := fmt.Sprintf("%s-%s", msg.ID().String(), string(uuids.New()))
+	if utf8.RuneCountInString(clientTranscationId) > maxLength {
+		clientTranscationId = clientTranscationId[:maxLength]
+	}
+
+	mmsMsgData := make([]mmsLongcodeMessage, 0)
+	mmsMsg := mmsLongcodeMessage{
+		DisplayName: filename,
+		MediaType:   mediaType,
+		MediaUrl:    fullURL,
+	}
+	mmsMsgData = append(mmsMsgData, mmsMsg)
+
+	payload := &mmsLongcodePayload{
+		RequestId:       clientTranscationId,
+		From:            channelAddress,
+		To:              []string{destination},
+		RefMessageId:    msg.ID().String(),
+		AllowAdaptation: "true",
+		ForwardLock:     "false",
+		Message:         mmsMsgData,
+	}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, sendURL, bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.SetBasicAuth(username, password)
+
+	rr, err := utils.MakeHTTPRequest(req)
+
+	return rr, err
+}
+
+func (h *handler) SendShortcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, error) {
+	sendURL := h.Server().Config().KaleyraMMSEndpoint
+	username := h.Server().Config().KaleyraMMSUsername
+	password := h.Server().Config().KaleyraMMSPassword
+	baseProductCode := h.Server().Config().KaleyraMMSProductCode
+
+	channelAddress := strings.TrimLeft(msg.Channel().Address(), "+")
+	productCode := fmt.Sprintf(baseProductCode, channelAddress)
+
+	attachment := msg.Attachments()[0]
+	parts := strings.SplitN(attachment, ":", 2)
+	mimeType := parts[0]
+	fullURL := parts[1]
+
+	// Extract filename from URL
+	urlParts := strings.Split(fullURL, "/")
+	filename := urlParts[len(urlParts)-1]
+	maxLength := 63
+	if utf8.RuneCountInString(filename) > maxLength {
+		filename = filename[:maxLength]
+	}
+
+	destination := fmt.Sprintf("tel:%s", strings.TrimLeft(msg.URN().Path(), "+"))
+	clientTranscation := fmt.Sprintf("%s-%s", msg.ID().String(), string(uuids.New()))
+	if utf8.RuneCountInString(clientTranscation) > maxLength {
+		clientTranscation = clientTranscation[:maxLength]
+	}
+
+	form := url.Values{
+		"serviceCode":         []string{channelAddress},
+		"destination":         []string{destination},
+		"isSubjectEncoded":    []string{"true"},
+		"senderID":            []string{channelAddress},
+		"clientTransactionID": []string{clientTranscation},
+		"contentFileName":     []string{filename},
+		"contentURL":          []string{fullURL},
+		"contentType":         []string{mimeType},
+		"contentFLock":        []string{"false"},
+		"productCode":         []string{productCode},
+		"action":              []string{"CONTENT"},
+		"allowAdaptation":     []string{"true"},
+		"priority":            []string{"normal"},
+	}
+
+	req, err := http.NewRequest(http.MethodPost, sendURL+"?"+form.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(username, password)
+
+	rr, err := utils.MakeHTTPRequest(req)
+	return rr, err
 }
 
 func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStatus, error) {
@@ -48,7 +170,8 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 	msgEncoding := GSM7
 	isGSM := gsm7.IsValid(msg.Text())
-	charsToCheck := []string{"@", "ñ", "é", "ü", "€", "_"}
+
+	charsToCheck := strings.Split(h.Server().Config().SMPPExtraChars, ",")
 
 	foundUCS := false
 	for _, char := range charsToCheck {
@@ -63,6 +186,27 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 	}
 
 	status := h.Backend().NewMsgStatusForID(msg.Channel(), msg.ID(), courier.MsgWired)
+
+	if len(msg.Attachments()) > 0 {
+		channelAddress := msg.Channel().Address()
+		var rr *utils.RequestResponse
+		var err error
+
+		if len(channelAddress) > 6 {
+			// using REST API for Longcode MMS
+			rr, err = h.SendLongcodeMsgMMS(msg)
+		} else {
+			// using REST API for Shortcode MMS
+			rr, err = h.SendShortcodeMsgMMS(msg)
+		}
+
+		log := courier.NewChannelLogFromRR("Message Sent", msg.Channel(), msg.ID(), rr).WithError("Message Send Error", err)
+		if err != nil {
+			status.SetStatus(courier.MsgFailed)
+		}
+
+		status.AddLog(log)
+	}
 
 	if h.shouldSplit(msg.Text(), msgEncoding) {
 		parts := h.encodeSplit(msg.Text(), msgEncoding)
@@ -371,6 +515,14 @@ func (h *handler) sendToSMPP(data interface{}) (*utils.RequestResponse, error) {
 	return utils.MakeHTTPRequest(req)
 }
 
+func (h *handler) receiveMMSMessage(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
+	return nil, nil
+}
+
+func (h *handler) receiveMMSStatus(ctx context.Context, channel courier.Channel, w http.ResponseWriter, r *http.Request) ([]courier.Event, error) {
+	return nil, nil
+}
+
 type MsgEncoding string
 
 const (
@@ -400,4 +552,25 @@ type channelPayload struct {
 	MsgID    int32  `json:"msg_id,omitempty"`
 	MsgRef   string `json:"msg_ref,omitempty"`
 	Receiver string `json:"receiver,omitempty"`
+}
+
+type mmsLongcodePayload struct {
+	CustomerId      string               `json:"customerId,omitempty"`
+	RequestId       string               `json:"requestId"`
+	From            string               `json:"from"`
+	To              []string             `json:"to"`
+	Subject         string               `json:"subject,omitempty"`
+	RefMessageId    string               `json:"refMessageId,omitempty"`
+	ReportingKey1   string               `json:"reportingKey1,omitempty"`
+	ReportingKey2   string               `json:"reportingKey2,omitempty"`
+	AllowAdaptation string               `json:"allowAdaptation"`
+	ForwardLock     string               `json:"forwardLock"`
+	Message         []mmsLongcodeMessage `json:"message"`
+}
+
+type mmsLongcodeMessage struct {
+	Text        string `json:"text,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+	MediaType   string `json:"mediaType,omitempty"`
+	MediaUrl    string `json:"mediaUrl,omitempty"`
 }
