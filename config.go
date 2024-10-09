@@ -33,10 +33,12 @@ type Config struct {
 	WebChatServerSecret        string `help:"key for encoding the websocket tokens"`
 	SMPPServerEndpoint         string `help:"the URL of the server that handles SMPP connections"`
 	SMPPServerToken            string `help:"the token of the server that handles SMPP connections"`
+	SMPPExtraChars             string `help:"extra special chars for SMPP encoding as UCS2"`
 	KaleyraMMSLongcodeEndpoint string `help:"the Kaleyra endpoint for long code MMS service"`
 	KaleyraMMSEndpoint         string `help:"the Kaleyra endpoint for MMS service"`
 	KaleyraMMSUsername         string `help:"the Kaleyra username for MMS service authentication"`
 	KaleyraMMSPassword         string `help:"the Kaleyra password for MMS service authentication"`
+	KaleyraMMSProductCode      string `help:"the Kaleyra product code for MMS service"`
 
 	// IncludeChannels is the list of channels to enable, empty means include all
 	IncludeChannels []string
@@ -72,6 +74,7 @@ func NewConfig() *Config {
 		WebChatServerSecret:       "",
 		SMPPServerEndpoint:        "",
 		SMPPServerToken:           "",
+		SMPPExtraChars:            "",
 	}
 }
 

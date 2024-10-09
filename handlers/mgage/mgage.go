@@ -112,9 +112,10 @@ func (h *handler) SendShortcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, 
 	sendURL := h.Server().Config().KaleyraMMSEndpoint
 	username := h.Server().Config().KaleyraMMSUsername
 	password := h.Server().Config().KaleyraMMSPassword
+	baseProductCode := h.Server().Config().KaleyraMMSProductCode
 
 	channelAddress := strings.TrimLeft(msg.Channel().Address(), "+")
-	productCode := fmt.Sprintf("CCX_%s", channelAddress)
+	productCode := fmt.Sprintf(baseProductCode, channelAddress)
 
 	attachment := msg.Attachments()[0]
 	parts := strings.SplitN(attachment, ":", 2)
@@ -138,7 +139,6 @@ func (h *handler) SendShortcodeMsgMMS(msg courier.Msg) (*utils.RequestResponse, 
 	form := url.Values{
 		"serviceCode":         []string{channelAddress},
 		"destination":         []string{destination},
-		"subject":             []string{""},
 		"isSubjectEncoded":    []string{"true"},
 		"senderID":            []string{channelAddress},
 		"clientTransactionID": []string{clientTranscation},
@@ -171,7 +171,7 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 	msgEncoding := GSM7
 	isGSM := gsm7.IsValid(msg.Text())
 
-	charsToCheck := []string{"@", "ñ", "é", "ü", "€", "_"}
+	charsToCheck := strings.Split(h.Server().Config().SMPPExtraChars, ",")
 
 	foundUCS := false
 	for _, char := range charsToCheck {
