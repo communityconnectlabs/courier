@@ -355,7 +355,7 @@ func downloadMediaToS3(ctx context.Context, b *backend, channel courier.Channel,
 	}
 
 	// create our filename
-	filename := string(uuids.New())
+	filename := string(uuids.New()) + "__" + msgUUID.String()
 
 	// if we have images as an attachment to be downloaded to S3, making sure that our files will have 1920px as a limit of size
 	if mimeType == "image/png" || mimeType == "image/jpeg" || mimeType == "image/jpg" {
