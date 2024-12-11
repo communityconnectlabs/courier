@@ -6,20 +6,19 @@ import (
 )
 
 var keywords = [...]string{
-	"ATOP",
-	"BLOCK",
-	"DTOP",
-	"KYS",
-	"OPS",
-	"Opt out",
-	"SROP",
-	"STIP",
-	"STO",
-	"STOO",
-	"STOOP",
-	"STORE",
-	"STP",
-	"SYOP",
+	"atop",
+	"block",
+	"dtop",
+	"kys",
+	"ops",
+	"srop",
+	"stip",
+	"sto",
+	"stoo",
+	"stoop",
+	"store",
+	"stp",
+	"syop",
 	"alisin",
 	"annoying",
 	"asshole",
@@ -38,7 +37,6 @@ var keywords = [...]string{
 	"dick",
 	"dicks",
 	"die",
-	"do not send",
 	"duck",
 	"ducking",
 	"dừng",
@@ -51,7 +49,6 @@ var keywords = [...]string{
 	"fuckers",
 	"fucking",
 	"gfy",
-	"go away",
 	"harass",
 	"harassed",
 	"harassment",
@@ -64,14 +61,12 @@ var keywords = [...]string{
 	"joder",
 	"kanselahin",
 	"kết",
-	"lose my number",
 	"lumabas",
 	"mag-exit",
 	"mag-unsubscribe",
 	"mierda",
 	"motherfucker",
 	"motherfuckers",
-	"opted out",
 	"parar",
 	"pendeja",
 	"pendejo",
@@ -95,7 +90,6 @@ var keywords = [...]string{
 	"stop",
 	"stopall",
 	"suck",
-	"take me off",
 	"terminar",
 	"thoát",
 	"thúc",
@@ -125,13 +119,23 @@ var keywords = [...]string{
 	"취소",
 }
 
+var phrases = []string{
+	"take me off",
+	"opted out",
+	"lose my number",
+	"go away",
+	"opt out",
+	"do not send",
+}
+
 const OptOutMessageBackKey = "opt_out_message_back"
 const OptOutDefaultMessageBack = "If this is an emergency, call 911. For more help from CCL contact support@communityconnectlabs.com. Msg freq. varies. Reply STOP to cancel."
 const OptOutDisabled = "opt_out_disabled"
 
 // CheckOptOutKeywordPresence is used to check the text contains opt-out words
 func CheckOptOutKeywordPresence(text string) bool {
-	textWords := strings.Split(strings.ToLower(text), " ")
+	lowerText := strings.ToLower(text)
+	textWords := strings.Split(lowerText, " ")
 	checkWords := make([]string, len(textWords))
 
 	for _, word := range textWords {
@@ -142,7 +146,7 @@ func CheckOptOutKeywordPresence(text string) bool {
 		checkWords = append(checkWords, newWord)
 	}
 
-	return len(intersection(checkWords, keywords)) > 0
+	return len(intersection(checkWords, keywords)) > 0 || StringSliceContains(phrases, lowerText, false)
 }
 
 func intersection(a interface{}, b interface{}) []interface{} {
@@ -164,6 +168,16 @@ func contains(a interface{}, e interface{}) bool {
 
 	for i := 0; i < v.Len(); i++ {
 		if v.Index(i).Interface() == e {
+			return true
+		}
+	}
+	return false
+}
+
+// StringSliceContains determines whether the given slice of strings contains the given string
+func StringSliceContains(slice []string, str string, caseSensitive bool) bool {
+	for _, s := range slice {
+		if (caseSensitive && s == str) || (!caseSensitive && strings.EqualFold(s, str)) {
 			return true
 		}
 	}
