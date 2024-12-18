@@ -249,8 +249,12 @@ func (h *handler) SendMsg(ctx context.Context, msg courier.Msg) (courier.MsgStat
 
 		// add any media URL to the first part
 		if len(msg.Attachments()) > 0 && i == 0 {
-			_, mediaURL := handlers.SplitAttachment(msg.Attachments()[0])
-			form["MediaUrl"] = []string{mediaURL}
+			attachmentsUrls := make([]string, len(msg.Attachments()))
+			for j, attachment := range msg.Attachments() {
+				_, mediaURL := handlers.SplitAttachment(attachment)
+				attachmentsUrls[j] = mediaURL
+			}
+			form["MediaUrl"] = attachmentsUrls
 		}
 
 		// set our from, either as a messaging service or from our address
