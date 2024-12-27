@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
+	"github.com/nyaruka/null"
 )
 
 // ContactUUID is our typing of a contact's UUID
@@ -30,6 +31,7 @@ func NewContactUUID(u string) (ContactUUID, error) {
 // Contact defines the attributes on a contact, for our purposes that is just a contact UUID
 type Contact interface {
 	UUID() ContactUUID
+	Language() null.String
 }
 
 // ContactFieldUUID is our typing of a contact field's UUID

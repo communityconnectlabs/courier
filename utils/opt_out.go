@@ -129,6 +129,7 @@ var phrases = []string{
 }
 
 const OptOutMessageBackKey = "opt_out_message_back"
+const OptOutMessageBackI18n = "opt_out_message_back_i18n"
 const OptOutDefaultMessageBack = "If this is an emergency, call 911. For more help from CCL contact support@communityconnectlabs.com. Msg freq. varies. Reply STOP to cancel."
 const OptOutDisabled = "opt_out_disabled"
 

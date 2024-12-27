@@ -85,6 +85,7 @@ SELECT
 	c.modified_on, 
 	c.created_on, 
 	c.name, 
+	c.language,
 	u.id as "urn_id"
 FROM 
 	contacts_contact AS c, 
@@ -232,11 +233,16 @@ type DBContact struct {
 	CreatedBy_  int `db:"created_by_id"`
 	ModifiedBy_ int `db:"modified_by_id"`
 
+	Language_ null.String `db:"language"`
+
 	IsNew_ bool
 }
 
 // UUID returns the UUID for this contact
 func (c *DBContact) UUID() courier.ContactUUID { return c.UUID_ }
+
+// Language returns the Language for contact
+func (c *DBContact) Language() null.String { return c.Language_ }
 
 // DBContactField is our struct for a contact field in the database
 type DBContactField struct {

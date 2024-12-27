@@ -13,6 +13,7 @@ import (
 
 	"github.com/nyaruka/gocommon/urns"
 	"github.com/nyaruka/gocommon/uuids"
+	"github.com/nyaruka/null"
 
 	"github.com/gomodule/redigo/redis"
 	_ "github.com/lib/pq" // postgres driver
@@ -308,7 +309,7 @@ func (mb *MockBackend) GetContact(ctx context.Context, channel Channel, urn urns
 	contact, found := mb.contacts[urn]
 	if !found {
 		uuid, _ := NewContactUUID(string(uuids.New()))
-		contact = &mockContact{channel, urn, auth, uuid}
+		contact = &mockContact{channel, urn, auth, uuid, null.String("")}
 		mb.contacts[urn] = contact
 	}
 	return contact, nil
@@ -612,7 +613,13 @@ func NewMockChannel(uuid string, channelType string, address string, country str
 		country:     country,
 		config:      config,
 		role:        "SR",
-		orgConfig:   map[string]interface{}{},
+		orgConfig: map[string]interface{}{
+			"opt_out_message_back": "Opt Out Message",
+			"opt_out_message_back_i18n": map[string]interface{}{
+				"eng": "English opt-out message",
+				"ukr": "Українське повідомлення про відписку",
+			},
+		},
 	}
 	return channel
 }
@@ -812,6 +819,9 @@ type mockContact struct {
 	urn     urns.URN
 	auth    string
 	uuid    ContactUUID
+	Lang    null.String
 }
 
 func (c *mockContact) UUID() ContactUUID { return c.uuid }
+
+func (c *mockContact) Language() null.String { return c.Lang }

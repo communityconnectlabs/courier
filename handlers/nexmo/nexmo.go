@@ -111,6 +111,12 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
 	}
 
+	// get our contact
+	contact, err := h.Backend().GetContact(ctx, channel, urn, "", "")
+	if err != nil {
+		return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, err)
+	}
+
 	// build our msg
 	msg := h.Backend().NewIncomingMsg(channel, urn, form.Text)
 
@@ -119,7 +125,7 @@ func (h *handler) receiveMessage(ctx context.Context, channel courier.Channel, w
 	if optOutDisabled == false {
 		// check whether the text contains opt-out words
 		if utils.CheckOptOutKeywordPresence(msg.Text()) {
-			textMessage := channel.OrgConfigForKey(utils.OptOutMessageBackKey, utils.OptOutDefaultMessageBack)
+			textMessage := courier.GetOptOutMessage(channel, contact)
 			msgBack := h.Backend().NewOutgoingMsg(
 				channel, courier.MsgID(0), urn, textMessage.(string), true, []string{}, "", "",
 			)
