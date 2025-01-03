@@ -1,7 +1,7 @@
 /* Org with id 1 */
 DELETE FROM orgs_org;
 INSERT INTO orgs_org("id", "name", "language", "is_anon", "config")
-              VALUES(1, 'Test Org', 'eng', FALSE, '{ "CHATBASE_API_KEY": "cak" }');
+              VALUES(1, 'Test Org', 'eng', FALSE, '{ "CHATBASE_API_KEY": "cak", "opt_out_message_back": "Opt Out Message", "opt_out_message_back_i18n": {"eng": "English opt-out message", "ukr": "Українське повідомлення про відписку"} }');
 
 /* Channel with id 10, 11, 12 */
 DELETE FROM channels_channel;
