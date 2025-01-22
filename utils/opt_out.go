@@ -144,6 +144,7 @@ func CheckOptOutKeywordPresence(text string) bool {
 		newWord = strings.ReplaceAll(newWord, "!", "")
 		newWord = strings.ReplaceAll(newWord, ".", "")
 		newWord = strings.ReplaceAll(newWord, ",", "")
+		newWord = strings.ReplaceAll(newWord, "\n", "")
 		checkWords = append(checkWords, newWord)
 	}
 
