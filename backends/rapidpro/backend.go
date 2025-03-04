@@ -71,6 +71,12 @@ func (b *backend) GetContact(ctx context.Context, c courier.Channel, urn urns.UR
 	return contactForURN(ctx, b, dbChannel.OrgID_, dbChannel, urn, auth, name)
 }
 
+// GetContactByUUID returns the contact or the error git the passed in contact UUID
+func (b *backend) GetContactByUUID(ctx context.Context, c courier.Channel, contactUUID courier.ContactUUID) (courier.Contact, error) {
+	dbChannel := c.(*DBChannel)
+	return contactForUUID(ctx, b, dbChannel.OrgID_, contactUUID)
+}
+
 // AddURNtoContact adds a URN to the passed in contact
 func (b *backend) AddURNtoContact(ctx context.Context, c courier.Channel, contact courier.Contact, urn urns.URN) (urns.URN, error) {
 	tx, err := b.db.BeginTxx(ctx, nil)

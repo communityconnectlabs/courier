@@ -218,6 +218,35 @@ func contactForURN(ctx context.Context, b *backend, org OrgID, channel *DBChanne
 	return contact, nil
 }
 
+const lookupContactFromUUIDSQL = `
+SELECT
+	c.org_id,
+	c.id,
+	c.uuid,
+	c.modified_on,
+	c.created_on,
+	c.name,
+	c.language
+FROM
+	contacts_contact AS c
+WHERE
+	c.uuid = $1 AND
+  c.org_id = $2 AND
+	c.is_active = TRUE
+`
+
+// contactForUUID tries to load contact by its UUID
+func contactForUUID(ctx context.Context, b *backend, org OrgID, contactUUID courier.ContactUUID) (*DBContact, error) {
+	// try to look up our contact by UUID
+	contact := &DBContact{}
+	err := b.db.GetContext(ctx, contact, lookupContactFromUUIDSQL, contactUUID, org)
+	if err != nil && err != sql.ErrNoRows {
+		logrus.WithError(err).WithField("uuid", contactUUID).WithField("org_id", org).Error("error looking up contact")
+		return nil, errors.Wrap(err, "error looking up contact by URN")
+	}
+	return contact, err
+}
+
 // DBContact is our struct for a contact in the database
 type DBContact struct {
 	OrgID_ OrgID               `db:"org_id"`
