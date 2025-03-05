@@ -55,7 +55,7 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 	var urn urns.URN
 	var errURN error
 	var userToken string
-	if payload.ContactUUID != NilContactUUID && payload.UserToken != "" {
+	if payload.ContactUUID != NilContactUUID && payload.UserToken == "" {
 		// no URN? ignore this
 		if payload.URN == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no identifier")
