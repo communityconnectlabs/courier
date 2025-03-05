@@ -35,6 +35,9 @@ type Backend interface {
 	// GetContact returns (or creates) the contact for the passed in channel and URN
 	GetContact(context context.Context, channel Channel, urn urns.URN, auth string, name string) (Contact, error)
 
+	// GetContactByUUID returns the contact or the error git the passed in contact UUID
+	GetContactByUUID(context context.Context, channel Channel, contactUUID ContactUUID) (Contact, error)
+
 	// AddURNtoContact adds a URN to the passed in contact
 	AddURNtoContact(context context.Context, channel Channel, contact Contact, urn urns.URN) (urns.URN, error)
 

@@ -315,6 +315,12 @@ func (mb *MockBackend) GetContact(ctx context.Context, channel Channel, urn urns
 	return contact, nil
 }
 
+// GetContactByUUID returns the contact or the error git the passed in contact UUID
+func (mb *MockBackend) GetContactByUUID(ctx context.Context, channel Channel, contactUUID ContactUUID) (Contact, error) {
+	contact := &mockContact{channel, urns.NilURN, "", contactUUID, null.String("")}
+	return contact, nil
+}
+
 // AddURNtoContact adds a URN to the passed in contact
 func (mb *MockBackend) AddURNtoContact(context context.Context, channel Channel, contact Contact, urn urns.URN) (urns.URN, error) {
 	mb.contacts[urn] = contact
