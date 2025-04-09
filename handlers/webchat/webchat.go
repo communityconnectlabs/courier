@@ -55,7 +55,28 @@ func (h *handler) registerUser(ctx context.Context, channel Channel, w http.Resp
 	var urn urns.URN
 	var errURN error
 	var userToken string
-	if payload.UserToken == "" {
+	if payload.ContactUUID != NilContactUUID && payload.UserToken == "" {
+		// no URN? ignore this
+		if payload.URN == "" {
+			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no identifier")
+		}
+
+		// retrieve contact by UUID
+		contact, errGetContact := h.Backend().GetContactByUUID(ctx, channel, payload.ContactUUID)
+		if errGetContact != nil {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errGetContact)
+		}
+
+		// create our URN
+		urn, errURN = urns.NewURNFromParts(channel.Schemes()[0], payload.URN, "", "")
+		userToken = CreateToken(urn.String(), h.Server().Config().WebChatServerSecret)
+
+		// attach URN to Contact
+		_, errSettingUrn := h.Backend().AddURNtoContact(ctx, channel, contact, urn)
+		if errSettingUrn != nil {
+			return nil, handlers.WriteAndLogRequestError(ctx, h, channel, w, r, errSettingUrn)
+		}
+	} else if payload.UserToken == "" {
 		// no URN? ignore this
 		if payload.URN == "" {
 			return nil, handlers.WriteAndLogRequestIgnored(ctx, h, channel, w, r, "Ignoring request, no identifier")
@@ -450,10 +471,11 @@ func urnFromToken(tokenString string, secret string) (string, error) {
 }
 
 type userPayload struct {
-	URN       string                 `json:"urn"`
-	Language  string                 `json:"language"`
-	UserToken string                 `json:"user_token"`
-	Extra     map[string]interface{} `json:"extra,omitempty"`
+	URN         string                 `json:"urn"`
+	Language    string                 `json:"language"`
+	UserToken   string                 `json:"user_token"`
+	ContactUUID ContactUUID            `json:"contact_uuid"`
+	Extra       map[string]interface{} `json:"extra,omitempty"`
 }
 
 type msgPayload struct {
