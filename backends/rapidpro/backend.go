@@ -412,10 +412,11 @@ func (b *backend) WriteMsg(ctx context.Context, m courier.Msg) error {
 			"opt_out_message":  m.Text(),
 			"opt_out_datetime": m.ReceivedOn(),
 		})
-		return writeChannelEvent(timeout, b, event)
-	} else {
-		return writeMsg(timeout, b, m)
+		if err := writeChannelEvent(timeout, b, event); err != nil {
+			return err
+		}
 	}
+	return writeMsg(timeout, b, m)
 }
 
 // NewMsgAttachmentForExternalID creates a new Attachment object for the given message id
