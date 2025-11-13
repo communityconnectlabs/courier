@@ -44,6 +44,9 @@ type Config struct {
 
 	// ExcludeChannels is the list of channels to exclude, empty means exclude none
 	ExcludeChannels []string
+
+	// Ably API key for PubSub
+	AblyApiKey string `help:"the Ably API key for PubSub service"`
 }
 
 // NewConfig returns a new default configuration object
@@ -73,6 +76,7 @@ func NewConfig() *Config {
 		WebChatServerSecret:       "",
 		SMPPServerEndpoint:        "",
 		SMPPServerToken:           "",
+		AblyApiKey:                "",
 	}
 }
 

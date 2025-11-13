@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/ably/ably-go/ably"
 	"github.com/nyaruka/courier/handlers"
 	"github.com/nyaruka/courier/handlers/mgage"
 	"net/url"
@@ -416,7 +417,22 @@ func (b *backend) WriteMsg(ctx context.Context, m courier.Msg) error {
 			return err
 		}
 	}
-	return writeMsg(timeout, b, m)
+	err := writeMsg(timeout, b, m)
+
+	// notify conversationIDs users if possible else skip
+	if err != nil || b.pubSubChannel == nil || m.ID() == courier.NilMsgID {
+		return err
+	}
+	if conversationIDs, err := getMsgConversationIds(ctx, b, m.ID()); err == nil {
+		for _, conversationID := range conversationIDs {
+			err = b.pubSubChannel.Publish(ctx, "new_messages", fmt.Sprintf("%d:%d", conversationID, m.ID()))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return err
 }
 
 // NewMsgAttachmentForExternalID creates a new Attachment object for the given message id
@@ -987,6 +1003,17 @@ func (b *backend) Start() error {
 		"state": "started",
 	}).Info("backend started")
 
+	// setup PubSub service
+	if b.config.AblyApiKey != "" {
+		client, err := ably.NewRealtime(
+			ably.WithKey(b.config.AblyApiKey),
+			ably.WithAutoConnect(true),
+		)
+		if client != nil && err == nil {
+			b.pubSubClient = client
+			b.pubSubChannel = client.Channels.Get("courier")
+		}
+	}
 	return nil
 }
 
@@ -994,6 +1021,10 @@ func (b *backend) Start() error {
 func (b *backend) Stop() error {
 	// close our stop channel
 	close(b.stopChan)
+
+	if b.pubSubClient != nil {
+		b.pubSubClient.Close()
+	}
 
 	// wait for our threads to exit
 	b.waitGroup.Wait()
@@ -1057,4 +1088,8 @@ type backend struct {
 	dbWaitCount       int64
 	redisWaitDuration time.Duration
 	redisWaitCount    int64
+
+	// PubSub service to notify about new message
+	pubSubClient  *ably.Realtime
+	pubSubChannel *ably.RealtimeChannel
 }

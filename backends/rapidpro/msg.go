@@ -565,6 +565,18 @@ func writeExternalIDSeen(b *backend, msg courier.Msg) {
 	luaWriteExternalIDSeen.Do(r, windowKey, urnFingerprint, uuidText)
 }
 
+const selectMsgConversations = `
+SELECT cnv.id
+FROM msgs_msg msg
+INNER JOIN msgs_conversation cnv ON cnv.contact_id = msg.contact_id
+WHERE msg.id = $1;
+`
+
+func getMsgConversationIds(ctx context.Context, b *backend, msgID courier.MsgID) (conversationIds []int64, err error) {
+	err = b.db.SelectContext(ctx, &conversationIds, selectMsgConversations, msgID)
+	return
+}
+
 //-----------------------------------------------------------------------------
 // Our implementation of Msg interface
 //-----------------------------------------------------------------------------
