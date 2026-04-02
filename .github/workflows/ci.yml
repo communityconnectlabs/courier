@@ -1,15 +1,29 @@
 name: CI
 on: [push, pull_request]
 env:
-  go-version: "1.17.7"
-  redis-version: "3.2.4"
+  go-version: "1.26.1"
+  pg-version: "17"
+  postgis-version: "3.5"
+  redis-version: "5.0.6"
 jobs:
   test:
     name: Test
-    strategy:
-      matrix:
-        pg-version: ["12", "13"]
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: courier_test
+          POSTGRES_USER: courier
+          POSTGRES_PASSWORD: courier
+        options: >-
+          --health-cmd "pg_isready -U courier -d courier_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
@@ -19,18 +33,13 @@ jobs:
         with:
           redis version: ${{ env.redis-version }}
 
-      - name: Install PostgreSQL
-        uses: harmon758/postgresql-action@v1
-        with:
-          postgresql version: ${{ matrix.pg-version }}
-          postgresql db: courier_test
-          postgresql user: courier
-          postgresql password: courier
-
-      - name: Install Go
-        uses: actions/setup-go@v1
-        with:
-          go-version: ${{ env.go-version }}
+      - name: Install Go ${{ env.go-version }}
+        run: |
+          curl -LO https://go.dev/dl/go${{ env.go-version }}.linux-amd64.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf go${{ env.go-version }}.linux-amd64.tar.gz
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Run tests
         run: go test -p=1 -coverprofile=coverage.text -covermode=atomic ./...
@@ -51,10 +60,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v1
 
-      - name: Install Go
-        uses: actions/setup-go@v1
-        with:
-          go-version: ${{ env.go-version }}
+      - name: Install Go ${{ env.go-version }}
+        run: |
+          curl -LO https://go.dev/dl/go${{ env.go-version }}.linux-amd64.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf go${{ env.go-version }}.linux-amd64.tar.gz
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Publish release
         uses: goreleaser/goreleaser-action@v1
