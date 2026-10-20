@@ -3,6 +3,7 @@ package rapidpro
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/nyaruka/courier/handlers"
 	"github.com/nyaruka/courier/handlers/mgage"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -879,7 +881,18 @@ func (b *backend) Start() error {
 		MaxIdle:     4,                 // only keep up to this many idle
 		IdleTimeout: 240 * time.Second, // how long to wait before reaping a connection
 		Dial: func() (redis.Conn, error) {
-			conn, err := redis.Dial("tcp", redisURL.Host)
+			// Enable TLS when the URL uses the rediss:// scheme (e.g. ElastiCache
+			// in-transit encryption). Verification is on by default; set
+			// REDIS_TLS_SKIP_VERIFY=1 only for local self-signed testing.
+			var dialOpts []redis.DialOption
+			if redisURL.Scheme == "rediss" {
+				tlsConfig := &tls.Config{ServerName: redisURL.Hostname(), MinVersion: tls.VersionTLS12}
+				if os.Getenv("REDIS_TLS_SKIP_VERIFY") == "1" {
+					tlsConfig.InsecureSkipVerify = true
+				}
+				dialOpts = append(dialOpts, redis.DialUseTLS(true), redis.DialTLSConfig(tlsConfig))
+			}
+			conn, err := redis.Dial("tcp", redisURL.Host, dialOpts...)
 			if err != nil {
 				return nil, err
 			}
